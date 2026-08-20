@@ -173,8 +173,8 @@ def plot_volcano(df,
 
     if not highlights:
         highlights = []
-    if not display_gene_name:
-        display_gene_name = None
+    if not label_genes:
+        label_genes = None
 
     highlights_default = {}
     if not (y_thr is None or x_thr is None or no_default):
@@ -285,8 +285,19 @@ def plot_volcano(df,
     ax.spines[['right', 'top']].set_visible(False)
 
 
+    txt = ''
+    if x_thr and y_thr:
+        up = df[(df["neglog10"]< -math.log(y_thr, 10)) & (df[x] > x_thr)].shape[0]
+        down =  df[(df["neglog10"]< -math.log(y_thr, 10)) & (df[x] < -x_thr)].shape[0]
+        ns = df.shape[0] - (up + down)
+        txt = "\n\nup {}; down {}; ns {}".format(up, down, ns )
+
     ax.set_ylabel(ylabel, fontsize=24)
-    ax.set_xlabel(xlabel, fontsize=24)
+    ax.set_xlabel(xlabel , fontsize=24)
+
+    if txt:
+        plt.figtext(0.5, -0.05, txt, wrap=True, horizontalalignment='center', fontsize=16)
+
     
     if savefig:
         fig.savefig(savefig, bbox_inches="tight")
