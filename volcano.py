@@ -1,7 +1,7 @@
 """Volcano plots for differential-expression results.
 
 Draws volcano plots (-log10 adjusted p-value vs. log2 fold change) from a
-DESeq2-style results table stored as a TSV. The single public entry point
+pd.DataFrame (DESeq2-style results table). The single public entry point
 is `plot_volcano`.
 
 Points are coloured by default according to significance thresholds
@@ -35,11 +35,14 @@ mpl.rcParams["font.stretch"] = "expanded"
 plt.rcParams['pdf.fonttype'] = 42
 
 def _resolve(df, selector):
-    if callable(selector):                 # lambda d: d["value"] > 3
+    """
+    private allow to pass multiple type of selection
+    """
+    if callable(selector):                 
         result = selector(df)
-    elif isinstance(selector, pd.Series):    # a precomputed boolean mask
+    elif isinstance(selector, pd.Series):    
         result = selector.reindex(df.index, fill_value=False)
-    elif isinstance(selector, (list, set, pd.Index, tuple)):  # list of index labels
+    elif isinstance(selector, (list, set, pd.Index, tuple)): 
         result =  df.index.isin(selector)
     else:
         raise TypeError(selector)
@@ -53,27 +56,32 @@ def _full(n, val):
     arr[:] = [val] * n
     return arr
     
-def plot_volcano(df, alpha_value=1, width=12, height=7.5,
-                 p_float_min=False, color_bg = "white",
-                 display_gene_name = set(), display_gene_name_line=False,
+def plot_volcano(df,
+                 pval_floor=False, color_bg = "white",
+                 label_genes = None,
+                 label_genes_line = False,
                  x="log2FoldChange", y = "padj",
                  x_thr=1, y_thr=0.01, 
                  display_grid=True, 
-                 highlights={}, 
+                 highlights=None, 
+                 alpha_value=1, width=12, height=7.5,
                  color_ns="grey",
                  color_up="#F4AB5C",
                  color_down="#ACC8BE",
                  color_one_crit="lightgrey",
+                 show_thresholds_line=True,
                  no_default=False,
-                 size=5, color="grey",
-                 output=None, title="Title", return_fig=False, **defaults):
+                 xlabel='$Log_{2}$ fold change', ylabel='$-Log_{10}$ adj.P',
+                 size=5, color_base="grey",
+                 savefig=None, title="Title", return_fig=False, **scatter_kwargs):
 
     """Draw a volcano plot from a differential-expression results table.
 
     Reads a tab-separated results file, computes -log10 of the adjusted
     p-value, and scatters it against the log2 fold change. Points are first
     coloured by the default significance categories, then any user-supplied
-    `highlights` are overlaid on top. Rows containing any NA are dropped
+    `highlights` are overlaid on top. 
+    Rows containing any NA in the required column (lfc and padj) are dropped
     before plotting.
 
     
@@ -85,21 +93,22 @@ def plot_volcano(df, alpha_value=1, width=12, height=7.5,
     Parameters
     ----------
     df : pd.DataFrame
-        expected to have no NA
+        Rows containing any NA in the required column (lfc and padj) are dropped
+            before plotting.
     alpha_value : float, default 1
         Point transparency passed to scatter.
     width, height : float, default 12, 7.5
         Figure size in inches.
-    p_float_min : bool, default False
+    pval_floor : bool, default False
         Floor used to avoid log10(0). If True, clip p-values at the smallest
         positive float (sys.float_info.min); if False, clip at the smallest
         positive value observed in column `y`.
     color_bg : str, default "white"
         Figure background colour.
-    display_gene_name : set of str, default empty
+    label_genes : set of str, default empty
         Index labels to annotate. Labels are repositioned with adjustText to
         reduce overlap.
-    display_gene_name_line : bool
+    label_genes_line : bool
         add a line from gene label to gene
     x : str, default "log2FoldChange"
         Column holding the log2 fold change (x-axis).
@@ -113,11 +122,13 @@ def plot_volcano(df, alpha_value=1, width=12, height=7.5,
         the raw p-value, not on -log10).
     display_grid : bool, default True
         Whether to draw major and minor grid lines.
-    highlights : list of (selector, override) tuples, default empty
+    highlights : list of (selector, override) tuples, default None
         Custom styling layer, drawn on top of everything else. `selector` is
         anything accepted by _resolve (a predicate `lambda d: ...`, a boolean
         Series, or a list of index labels); `override` is a dict of scatter
-        keyword arguments, e.g. {"c": "red", "s": 20}, applied to the
+        keyword arguments, e.g. {"c": "red", "s": 20} (use c for color and s for size, refer to matplotlib), applied to the plot.
+        example:
+        [(lambda d: (d[y] >= 2) ^ (abs(d[x]) <= 1), { "c": "blue"})]
     color_ns : str, default "grey"
         Colour for points meeting neither criterion (not significant and
         within the fold-change threshold).
@@ -132,26 +143,38 @@ def plot_volcano(df, alpha_value=1, width=12, height=7.5,
         significance colouring; all points keep the base `color`.
     size : float, default 5
         Base point size.
-    color : str, default "grey"
-        Base point colour, used before any override.
-    output : str or path, optional
+    color_base : str, default "grey"
+        Base point colour, used before any override. if no default and no highlight all the point will be this color.
+    savefig : str or path, optional
         If given, save the figure to this path with bbox_inches="tight".
     title : str, default "Title"
         Plot title.
     return_fig : bool, default False
         return (fig, ax)
-    **defaults
+    xlabel: str default '$Log_{2}$ fold change',
+    ylabel: str '$-Log_{10}$ adj.P'
+    **scatter_kwargs
         Extra keyword arguments forwarded to scatter for every point
         (e.g. marker, linewidths).
 
     Returns
     -------
     None
-        The figure is drawn and optionally saved and or returned.
+        The figure is drawn
+        optional:
+            if return_fig == True  return the (fig, ax)
+        if savefig is not None save the figure
     """
 
-    df = df.dropna()
+
+
+    df = df.dropna(subset=[x, y])
     df = df.copy()
+
+    if not highlights:
+        highlights = []
+    if not display_gene_name:
+        display_gene_name = None
 
     highlights_default = {}
     if not (y_thr is None or x_thr is None or no_default):
@@ -161,13 +184,12 @@ def plot_volcano(df, alpha_value=1, width=12, height=7.5,
              (lambda d: (d[y] < y_thr) & (d[x] < -x_thr), { "c": color_down})]
 
 
-
     
     fig , ax = plt.subplots(figsize=(width, height))
     fig.patch.set_facecolor(color_bg)
     
     
-    if p_float_min:
+    if pval_floor:
         min_ = sys.float_info.min
     else:
         min_ = min(df[df[y] >0][y])
@@ -175,7 +197,7 @@ def plot_volcano(df, alpha_value=1, width=12, height=7.5,
     df["neglog10"] = -np.log10(df[y].clip(lower=min_))
 
 
-    style = {"c": color, "s": size, "alpha" :alpha_value, **defaults}
+    style = {"c": color_base, "s": size, "alpha" :alpha_value, **scatter_kwargs}
 
     n = len(df)
     arrays = {k: _full(len(df), v) for k, v in style.items()}
@@ -191,6 +213,7 @@ def plot_volcano(df, alpha_value=1, width=12, height=7.5,
                 a[mask] = v
                 
     #arrays = {k: _full(len(df), v) for k, v in style.items()}
+
     drawn_last = np.zeros(len(df), dtype=bool)
     for (selector, override) in highlights:
         mask = _resolve(df, selector)
@@ -219,8 +242,8 @@ def plot_volcano(df, alpha_value=1, width=12, height=7.5,
 
     
     texts_ = []
-    if display_gene_name: 
-        sub = df[df.index.isin(display_gene_name)]
+    if label_genes: 
+        sub = df[df.index.isin(label_genes)]
         text = list(sub.index)
         x_axis= x 
         X = sub.apply(lambda x: x[x_axis], axis=1)
@@ -228,7 +251,7 @@ def plot_volcano(df, alpha_value=1, width=12, height=7.5,
         obj = []
         for i, v in enumerate(text):
             texts_.append(ax.text(x=X.iloc[i], y=Y.iloc[i], s=v, zorder=15, fontsize=10))
-        if display_gene_name_line:
+        if label_genes_line:
             adjustText.adjust_text(texts_, expand=(1, 1),  arrowprops=dict(arrowstyle='-', color='black'))
         else:
             adjustText.adjust_text(texts_, expand=(1, 1))
@@ -243,15 +266,16 @@ def plot_volcano(df, alpha_value=1, width=12, height=7.5,
 
         ax.grid(True, which="minor", linewidth=0.3, alpha=0.3)
 
-    if y_thr is None:
-        h_line = -math.log(y_thr, 10)
-        ax.axhline(h_line, color="black", linestyle="--")
+    if show_thresholds_line:
+        if y_thr is None:
+            h_line = -math.log(y_thr, 10)
+            ax.axhline(h_line, color="black", linestyle="--")
 
-    if x_thr is None:
-        v_line = x_thr
-        ax.axvline(v_line, color="black", linestyle="--")
-        ax.axvline(-v_line, color="black", linestyle="--")
-        
+        if x_thr is None:
+            v_line = x_thr
+            ax.axvline(v_line, color="black", linestyle="--")
+            ax.axvline(-v_line, color="black", linestyle="--")
+            
     ax.tick_params(axis='y', labelsize=20)
     ax.tick_params(axis='x', labelsize=20)
     ax.margins(x=0.02, tight=True)
@@ -259,14 +283,13 @@ def plot_volcano(df, alpha_value=1, width=12, height=7.5,
     
     ax.set_title(title, fontsize=28)
     ax.spines[['right', 'top']].set_visible(False)
-    xleft, xright = ax.get_xlim()
-    ybottom, ytop = ax.get_ylim()
 
-    ax.set_ylabel('$-Log_{10}$ adj.P', fontsize=24)
-    ax.set_xlabel('$Log_{2}$ fold change', fontsize=24)
+
+    ax.set_ylabel(ylabel, fontsize=24)
+    ax.set_xlabel(xlabel, fontsize=24)
     
-    if output:
-        fig.savefig(output, bbox_inches="tight")
+    if savefig:
+        fig.savefig(savefig, bbox_inches="tight")
     if return_fig:
         return fig, ax
 
