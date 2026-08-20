@@ -66,8 +66,8 @@ def plot_volcano(df,
                  highlights=None, 
                  alpha_value=1, width=12, height=7.5,
                  color_ns="grey",
-                 color_up="#F4AB5C",
-                 color_down="#ACC8BE",
+                 color_up="#D65443",
+                 color_down="#237B7B",
                  color_one_crit="lightgrey",
                  show_thresholds_line=True,
                  no_default=False,
@@ -132,9 +132,9 @@ def plot_volcano(df,
     color_ns : str, default "grey"
         Colour for points meeting neither criterion (not significant and
         within the fold-change threshold).
-    color_up : str, default "#F4AB5C"
+    color_up : str, default "#D65443"
         Colour for up-regulated points (y < y_thr and x > x_thr).
-    color_down : str, default "#ACC8BE"
+    color_down : str, default "#237B7B"
         Colour for down-regulated points (y < y_thr and x < -x_thr).
     color_one_crit : str, default "lightgrey"
         Colour for points meeting exactly one of the two criteria.
@@ -267,11 +267,11 @@ def plot_volcano(df,
         ax.grid(True, which="minor", linewidth=0.3, alpha=0.3)
 
     if show_thresholds_line:
-        if y_thr is None:
+        if y_thr is not None:
             h_line = -math.log(y_thr, 10)
             ax.axhline(h_line, color="black", linestyle="--")
 
-        if x_thr is None:
+        if x_thr is not None:
             v_line = x_thr
             ax.axvline(v_line, color="black", linestyle="--")
             ax.axvline(-v_line, color="black", linestyle="--")
