@@ -25,6 +25,7 @@ matplotlib is configured for editable text in vector output
 import matplotlib.pyplot as plt
 import math
 from matplotlib.ticker import (MultipleLocator, AutoMinorLocator, MaxNLocator)
+from matplotlib.lines import Line2D
 import matplotlib as mpl
 import numpy as np
 import pandas as pd
@@ -55,25 +56,50 @@ def _full(n, val):
     arr = np.empty(n, dtype=object)   # object dtype holds strings, RGBA tuples, etc.
     arr[:] = [val] * n
     return arr
-    
+
+_ALIASES = {"size": "s", "color": "c", 'a': "alpha"}
+def mpl_norm_symbol(override, alias=_ALIASES):
+    """ map potential aliases to matplotlib arg"""
+    new = {}
+    for k, v in override.items():
+        key = alias.get(k, k)
+        if key in new:
+            raise ValueError(f"'{k}' and '{key}' both given : {override}; please only use one") 
+        new[key] = v
+    return new
+
+CALL_LEVEL = {"marker", "hatch", "zorder"}
+# more exist but I don't think those heve thei place : cmap, norm, vmin, vmax, 
+# may be in future: rasterized, hatch no sure hatch can be applied to scatter plot mauy end up using collection patch?
+
+
 def plot_volcano(df,
-                 pval_floor=False, color_bg = "white",
+                 pval_floor=False,
+                 color_bg = "white",
                  label_genes = None,
                  label_genes_line = False,
                  x="log2FoldChange", y = "padj",
                  x_thr=1, y_thr=0.01, 
                  display_grid=True, 
                  highlights=None, 
-                 alpha_value=1, width=12, height=7.5,
-                 color_ns="grey",
-                 color_up="#D65443",
-                 color_down="#237B7B",
-                 color_one_crit="lightgrey",
+                
+                color_sig = "#F7DDAA",
+                color_ns = "lightgrey",
+                color_up = "#FDAE61",
+                color_up_sig = "#D7191C",
+                color_down =  "#ABD9E9",
+                color_down_sig = "#2C7BB6",
+                alpha=1,
+
                  show_thresholds_line=True,
                  no_default=False,
                  xlabel='$Log_{2}$ fold change', ylabel='$-Log_{10}$ adj.P',
                  size=5, color_base="grey",
-                 savefig=None, title="Title", return_fig=False, **scatter_kwargs):
+                 width=12, height=7.5,
+                 custom_ax = None,
+                 savefig=None, title="Title",
+                return_fig=False, legend_bbox=(1.01, 0.5), **scatter_kwargs):
+
 
     """Draw a volcano plot from a differential-expression results table.
 
@@ -87,7 +113,7 @@ def plot_volcano(df,
     
         plot_volcano(df,
              y="padj", x="log2FoldChange",
-             highlights=[(["kl-3", "kl-5", "kl-2"], {"c": "red", "s":30}),],
+             highlights=[(["kl-3", "kl-5", "kl-2"], {"color": "red", "size":30}),],
              display_grid=True, display_gene_name=["kl-3", "kl-5", "kl-2"])#
 
     Parameters
@@ -95,7 +121,7 @@ def plot_volcano(df,
     df : pd.DataFrame
         Rows containing any NA in the required column (lfc and padj) are dropped
             before plotting.
-    alpha_value : float, default 1
+    alpha : float, default 1
         Point transparency passed to scatter.
     width, height : float, default 12, 7.5
         Figure size in inches.
@@ -126,23 +152,42 @@ def plot_volcano(df,
         Custom styling layer, drawn on top of everything else. `selector` is
         anything accepted by _resolve (a predicate `lambda d: ...`, a boolean
         Series, or a list of index labels); `override` is a dict of scatter
-        keyword arguments, e.g. {"c": "red", "s": 20} (use c for color and s for size, refer to matplotlib), applied to the plot.
-        example:
-        [(lambda d: (d[y] >= 2) ^ (abs(d[x]) <= 1), { "c": "blue"})]
-    color_ns : str, default "grey"
-        Colour for points meeting neither criterion (not significant and
-        within the fold-change threshold).
-    color_up : str, default "#D65443"
-        Colour for up-regulated points (y < y_thr and x > x_thr).
-    color_down : str, default "#237B7B"
-        Colour for down-regulated points (y < y_thr and x < -x_thr).
-    color_one_crit : str, default "lightgrey"
-        Colour for points meeting exactly one of the two criteria.
+        keyword arguments, e.g. {"color": "red", "size": 20} 
+
+        d[x] and d[y] refer to the "x" argument and the "y" argument (usualy lfc and pvalue).
+        you can also use any coluns present in the dataframe df.
+        [(lambda d: (d[y] >= 2) ^ (abs(d[x]) <= 1), { "color": "blue"})]
+
+        USing a label key work in the override, will add it to the legends
+
+    color_sig : str, default "#F7DDAA"
+        gene that pass the  p-value threshold but not the log folchange threshold.
+        (y > y_thr AND abs(x) > x_thr)
+    
+    color_ns : str, default "lightgrey"
+        gene that do not pass any threshold.
+        (y < y_thr AND abs(x) < x_thr)
+
+    color_up : str, default "#FDAE61"
+        Colour for up-regulated points (y < y_thr and abs(x) > x_thr).
+
+    color_up_sig : str, default "#D77191C"
+        Colour for significantly up-regulated points (y > y_thr and abs(x) > x_thr).
+
+    color_down : str, default "#ABD9E9"
+        Colour for down-regulated points (y < y_thr and abs(x) < -x_thr).
+    
+    color_down_sig : str, default "#2C7BB6"
+        Colour for significantly down-regulated points (y > y_thr and abs(x) < -x_thr).
+
+
     no_default : bool, default False
         If True (or if `x_thr` or `y_thr` is None), skip the default
         significance colouring; all points keep the base `color`.
     size : float, default 5
         Base point size.
+    marker: string '.'
+     default marker 
     color_base : str, default "grey"
         Base point colour, used before any override. if no default and no highlight all the point will be this color.
     savefig : str or path, optional
@@ -153,6 +198,8 @@ def plot_volcano(df,
         return (fig, ax)
     xlabel: str default '$Log_{2}$ fold change',
     ylabel: str '$-Log_{10}$ adj.P'
+    custom_ax: if set function will not create a figure but plot in this axes directly not compatible with:
+      return fig and savefig. 
     **scatter_kwargs
         Extra keyword arguments forwarded to scatter for every point
         (e.g. marker, linewidths).
@@ -167,27 +214,40 @@ def plot_volcano(df,
     """
 
 
-
+    if custom_ax is not None and (return_fig or savefig is not None):
+        raise ValueError("custom_ax argument is not compatible with return_fig or savefig argument")
+    
     df = df.dropna(subset=[x, y])
     df = df.copy()
 
     if not highlights:
         highlights = []
+
+    highlights = [(sel, mpl_norm_symbol(over)) for (sel, over) in highlights]
+    scatter_kwargs = mpl_norm_symbol(scatter_kwargs)
+
     if not label_genes:
         label_genes = None
 
-    highlights_default = {}
+    highlights_default = []
     if not (y_thr is None or x_thr is None or no_default):
-        highlights_default= [(lambda d: (d[y] >=y_thr) & (abs(d[x])<=x_thr), { "c": color_ns}),
-             (lambda d: (d[y] >=y_thr) ^ (abs(d[x])<=x_thr), { "c": color_one_crit}),
-             (lambda d: (d[y] < y_thr) & (d[x] > x_thr), { "c": color_up}),
-             (lambda d: (d[y] < y_thr) & (d[x] < -x_thr), { "c": color_down})]
+        highlights_default = [
+             (lambda d: (d[y] <= y_thr) & (abs(d[x]) <= x_thr), { "c": color_sig, "s": size, "alpha": alpha, "marker": "."}),
+             (lambda d: (d[y] >= y_thr) ^ (abs(d[x]) <= x_thr), { "c": color_ns, "s": size, "alpha": alpha, "marker": "."}),
+
+             (lambda d: (d[y] > y_thr) & (d[x] > x_thr), { "c": color_up, "s": size, "alpha": alpha, "marker": "."}),
+             (lambda d: (d[y] > y_thr) & (d[x] < -x_thr), { "c": color_down, "s": size, "alpha": alpha, "marker": "."}),
+
+             (lambda d: (d[y] <= y_thr) & (d[x] > x_thr), { "c": color_up_sig, "s": size, "alpha": alpha, "marker": ".", "label": "Overexpressed"}),
+             (lambda d: (d[y] <= y_thr) & (d[x] < -x_thr), { "c": color_down_sig, "s": size, "alpha": alpha, "marker": ".", "label": "Underexpressed"})
+             ]
 
 
-    
-    fig , ax = plt.subplots(figsize=(width, height))
-    fig.patch.set_facecolor(color_bg)
-    
+    if custom_ax:
+        ax = custom_ax
+    else:
+        fig , ax = plt.subplots(figsize=(width, height))
+        fig.patch.set_facecolor(color_bg)
     
     if pval_floor:
         min_ = sys.float_info.min
@@ -196,16 +256,28 @@ def plot_volcano(df,
         
     df["neglog10"] = -np.log10(df[y].clip(lower=min_))
 
+    legend = {}
+    #pop the label()
+    for (sel, ov)  in highlights_default:
+        label = ov.pop("label", None)
+        if label:
+            legend[label] = {**scatter_kwargs, **ov}
 
-    style = {"c": color_base, "s": size, "alpha" :alpha_value, **scatter_kwargs}
+    for (sel, ov)  in highlights:
+        label = ov.pop("label", None)
+        if label:
+            legend[label] = {**scatter_kwargs, **ov}
+            
 
+    style = {"c": color_base, "s": size, "alpha" :alpha, "marker": '.', **scatter_kwargs}
+    # apply default style
     n = len(df)
     arrays = {k: _full(len(df), v) for k, v in style.items()}
     for (selector, override) in highlights_default:
         mask = _resolve(df, selector)
         for key, v in override.items():
             if key not in arrays:                 # property not in base → create it
-                arrays[key] = _full(n, v)         # baseline = its own value; see note
+                arrays[key] = _full(n, v)         
             a = arrays[key]
             if a.dtype == object:                 # assign as list so tuples don't broadcast
                 a[mask] = [v] * int(np.count_nonzero(mask))
@@ -213,7 +285,7 @@ def plot_volcano(df,
                 a[mask] = v
                 
     #arrays = {k: _full(len(df), v) for k, v in style.items()}
-
+    # apply custom style if any
     drawn_last = np.zeros(len(df), dtype=bool)
     for (selector, override) in highlights:
         mask = _resolve(df, selector)
@@ -227,8 +299,15 @@ def plot_volcano(df,
             else:
                 a[mask] = v
 
+    # mpl is annoying those cn only be passed per call not per array
+    # use this so modified point are plotted on top.
+    sub = (dict(k, v)  for k v in arrays.items() if k in CALL_LEVEL)
+    pd.DataFrame(arrays)
     base = ~drawn_last
-    
+
+
+
+
     ax.scatter(x = df[x].values[base],
                y = df["neglog10"].values[base],
                zorder=1,
@@ -284,7 +363,7 @@ def plot_volcano(df,
     ax.set_title(title, fontsize=28)
     ax.spines[['right', 'top']].set_visible(False)
 
-
+    # plot a quick summary of the data
     txt = ''
     if x_thr and y_thr:
         up = df[(df["neglog10"]< -math.log(y_thr, 10)) & (df[x] > x_thr)].shape[0]
@@ -298,10 +377,20 @@ def plot_volcano(df,
     if txt:
         plt.figtext(0.5, -0.05, txt, wrap=True, horizontalalignment='center', fontsize=16)
 
-    
+    ##
+    legend_elements = []
+    for k, v in legend.items():
+        legend_elements.append(Line2D([0], [0],  marker=v.get("marker"),
+                                       color=v.get("c"), label=k, markersize=15))
+    if legend_elements:
+        ax.legend(handles=legend_elements, bbox_to_anchor=legend_bbox)
+
+    # can't be used if custom_ax is set
     if savefig:
         fig.savefig(savefig, bbox_inches="tight")
     if return_fig:
         return fig, ax
+    if custom_ax: 
+        return ax
 
 
