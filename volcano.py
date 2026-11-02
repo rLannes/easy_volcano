@@ -324,8 +324,8 @@ def plot_volcano(df,
     genes = []
 
     if label_top:
-        genes.extend(list(df[df["x"] < 0].sort_values("y").head(label_top).index))
-        genes.extend(list(df[df["x"] > 0].sort_values("y").head(label_top).index))
+        genes.extend(list(df[(df["x"] < -x_thr) ].sort_values("y").head(label_top).index))
+        genes.extend(list(df[(df["x"] > x_thr) ].sort_values("y").head(label_top).index))
 
     if label_genes: 
         if isinstance(label_genes, str):
