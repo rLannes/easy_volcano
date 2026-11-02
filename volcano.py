@@ -256,7 +256,7 @@ def plot_volcano(df,
         
     df["neglog10"] = -np.log10(df[y].clip(lower=min_))
     df["x"] = df[x]
-    df["y"] = df["neglog10"]
+    df["y"] = df[y]
 
     legend = {}
     #pop the label()
