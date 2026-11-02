@@ -76,8 +76,10 @@ CALL_LEVEL = {"marker", "hatch", "zorder"}
 def plot_volcano(df,
                  pval_floor=False,
                  color_bg = "white",
+
                  label_genes = None,
                  label_genes_line = False,
+                 label_top = None, # take int label the top X gene over and under expressed (so *2 labels)
                  x="log2FoldChange", y = "padj",
                  x_thr=1, y_thr=0.01, 
                  display_grid=True, 
@@ -319,15 +321,36 @@ def plot_volcano(df,
 
     
     texts_ = []
+    genes = []
+
+    if label_top:
+        genes.extend(list(df[df["x"] < 0].sort_values("y").head(label_top).index))
+        genes.extend(list(df[df["x"] > 0].sort_values("y").head(label_top).index))
+
     if label_genes: 
-        sub = df[df.index.isin(label_genes)]
+        if isinstance(label_genes, str):
+            label_genes = [label_genes]
+
+        missing = set(label_genes) - set(df.index)
+
+        if missing:
+            # TODO LOG
+            print(f"WARNING: genes not found: {missing}", file=sys.stderr)
+
+        genes.extend(label_genes)
+
+    if genes:
+
+        sub = df[df.index.isin(genes)]
         text = list(sub.index)
-        x_axis= x 
+        x_axis = x 
         X = sub.apply(lambda x: x[x_axis], axis=1)
         Y = sub.apply(lambda x: x["neglog10"], axis=1)
-        obj = []
         for i, v in enumerate(text):
             texts_.append(ax.text(x=X.iloc[i], y=Y.iloc[i], s=v, fontsize=10))
+
+
+    if texts_:
         if label_genes_line:
             adjustText.adjust_text(texts_, expand=(1, 1),  arrowprops=dict(arrowstyle='-', color='black'))
         else:
