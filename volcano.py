@@ -383,7 +383,7 @@ def plot_volcano(df,
             c = v.get("color")
         m = v.get("marker", ".")
         legend_elements.append(Line2D([0], [0],  marker=m,
-                                       markerfacecolor=c, color='w', label=k, markersize=45))
+                                       markerfacecolor=c, color='w', label=k, markersize=25))
     if legend_elements:
         ax.legend(handles=legend_elements, bbox_to_anchor=legend_bbox)
 
