@@ -302,12 +302,13 @@ def plot_volcano(df,
 
     # mpl is annoying those cn only be passed per call not per array
     # use this so modified point are plotted on top.
-    sub = dict((k, v)  for (k, v) in arrays.items() if k in CALL_LEVEL)
     
+    sub = dict((k, v)  for (k, v) in arrays.items() if k in CALL_LEVEL)
+    sub["_top_layer"] = drawn_last
     group_df = pd.DataFrame(sub)
     indices_same_call_level = group_df.groupby(list(sub), sort=False, dropna=False).indices
 
-    sub["_top_layer"] = drawn_last
+    
     for index in sorted(indices_same_call_level.values(), key=lambda p: p["_top_layer"]):
         per_call = {k: arrays[k][index[0]] for k in CALL_LEVEL if k in arrays }
         per_array = {k: arrays[v][index] for (k,v) in arrays.items() if k not in CALL_LEVEL }
