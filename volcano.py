@@ -317,18 +317,6 @@ def plot_volcano(df,
         ax.scatter(df[x].values[index], df["neglog10"].values[index],
                    **per_array, **per_call)
 
-    #base = ~drawn_last
-    #ax.scatter(x = df[x].values[base],
-    #           y = df["neglog10"].values[base],
-    #           zorder=1,
-    #           **{k: v[base] for k, v in arrays.items()})
-
-    #if drawn_last.any():
-    #    ax.scatter(x = df[x].values[drawn_last],
-    #           y = df["neglog10"].values[drawn_last],
-    #           zorder=3,
-    #           **{k: v[drawn_last] for k, v in arrays.items()})
-
     
     texts_ = []
     if label_genes: 
@@ -390,7 +378,7 @@ def plot_volcano(df,
     ##
     legend_elements = []
     for k, v in legend.items():
-        legend_elements.append(Line2D([0], [0],  marker=v.get("marker"),
+        legend_elements.append(Line2D([0], [0],  marker='o',
                                        color=v.get("c"), label=k, markersize=15))
     if legend_elements:
         ax.legend(handles=legend_elements, bbox_to_anchor=legend_bbox)
