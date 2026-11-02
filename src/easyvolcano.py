@@ -35,7 +35,7 @@ import adjustText
 mpl.rcParams["font.stretch"] = "expanded"
 plt.rcParams['pdf.fonttype'] = 42
 
-def _resolve(df, selector):
+def _resolve(df, selector, label_col=None):
     """
     private allow to pass multiple type of selection
     """
@@ -44,7 +44,8 @@ def _resolve(df, selector):
     elif isinstance(selector, pd.Series):    
         result = selector.reindex(df.index, fill_value=False)
     elif isinstance(selector, (list, set, pd.Index, tuple)): 
-        result =  df.index.isin(selector)
+        key = df.index if label_col is None else df[label_col]
+        result =  key.isin(selector)
     else:
         raise TypeError(selector)
     return np.asarray(result, dtype=bool) 
@@ -68,6 +69,110 @@ def mpl_norm_symbol(override, alias=_ALIASES):
         new[key] = v
     return new
 
+
+def prep_df(df, x, y, pval_floor):
+        df = df.dropna(subset=[x, y])
+        df = df.copy()
+
+        if pval_floor:
+            min_ = sys.float_info.min
+        else:
+            min_ = min(df[df[y] >0][y])
+
+        df["neglog10"] = -np.log10(df[y].clip(lower=min_))
+        df["x"] = df[x]
+        df["y"] = df[y]
+        return df
+
+def prep_legend(highlights_default, highlights, **scatter_kwargs):
+    legend = {}
+    #pop the label()
+    for (sel, ov)  in highlights_default:
+        label = ov.pop("label", None)
+        if label:
+            legend[label] = {**scatter_kwargs, **ov}
+
+    for (sel, ov)  in highlights:
+        label = ov.pop("label", None)
+        zorder = ov.pop("zorder", 2)
+        if label:
+            legend[label] = {"zorder": zorder, **scatter_kwargs, **ov}
+    return legend
+
+def get_index_point_to_labels(df, x_thr=1, label_top=None, label_column=None):
+
+    index_to_get = []
+    if label_top:
+        index_to_get.extend(list(df[(df["x"] < -x_thr) ].sort_values("y").head(label_top).index))
+        index_to_get.extend(list(df[(df["x"] > x_thr) ].sort_values("y").head(label_top).index))
+
+    if label_genes: 
+        if isinstance(label_genes, str):
+            label_genes = [label_genes]
+        if label_column is not None:
+            missing = set(label_genes) - set(df[label_column])
+        else:
+            missing = set(label_genes) - set(df.index)
+
+        if missing:
+            # TODO LOG
+            print(f"WARNING: genes not found: {missing}", file=sys.stderr)
+
+        if label_column is not None :
+            index_to_get.extend(df[df[label_column].isin(label_genes)].index)
+        else:
+            index_to_get.extend(df[df.index.isin(label_genes)].index)
+
+    return index_to_get
+
+
+def get_highlight_default():
+        highlights_default = []
+        if not (y_thr is None or x_thr is None or no_default):
+            highlights_default = [
+                (lambda d: (d[y] <= y_thr) & (abs(d[x]) <= x_thr), { "c": color_sig, "s": size, "alpha": alpha, "marker": ".", "zorder": 1}),
+                (lambda d: (d[y] >= y_thr) ^ (abs(d[x]) <= x_thr), { "c": color_ns, "s": size, "alpha": alpha, "marker": ".", "zorder": 1}),
+
+                (lambda d: (d[y] > y_thr) & (d[x] > x_thr), { "c": color_up, "s": size, "alpha": alpha, "marker": ".", "zorder": 1}),
+                (lambda d: (d[y] > y_thr) & (d[x] < -x_thr), { "c": color_down, "s": size, "alpha": alpha, "marker": ".", "zorder": 1}),
+
+                (lambda d: (d[y] <= y_thr) & (d[x] > x_thr), { "c": color_up_sig, "s": size, "alpha": alpha, "marker": ".", "label": "Overexpressed", "zorder": 1}),
+                (lambda d: (d[y] <= y_thr) & (d[x] < -x_thr), { "c": color_down_sig, "s": size, "alpha": alpha, "marker": ".", "label": "Underexpressed", "zorder": 1})
+                ]
+        return highlights_default
+
+
+def get_array_style(df, highlights_default, highlights, style, label_column):
+        n = len(df)
+        arrays = {k: _full(len(df), v) for k, v in style.items()}
+        for (selector, override) in highlights_default:
+            mask = _resolve(df, selector)
+            for key, v in override.items():
+                if key not in arrays:                 # property not in base → create it
+                    arrays[key] = _full(n, v)         
+                a = arrays[key]
+                if a.dtype == object:                 # assign as list so tuples don't broadcast
+                    a[mask] = [v] * int(np.count_nonzero(mask))
+                else:
+                    a[mask] = v
+                    
+        #arrays = {k: _full(len(df), v) for k, v in style.items()}
+        # apply custom style if any
+        drawn_last = np.zeros(len(df), dtype=bool)
+        for (selector, override) in highlights:
+            mask = _resolve(df, selector, label_col=label_column)
+            drawn_last |= mask
+            for key, v in override.items():
+                if key not in arrays:                 # property not in base → create it
+                    arrays[key] = _full(n, v)         # baseline = its own value; see note
+                a = arrays[key]
+                if a.dtype == object:                 # assign as list so tuples don't broadcast
+                    a[mask] = [v] * int(np.count_nonzero(mask))
+                else:
+                    a[mask] = v
+        return arrays, drawn_last
+
+    
 CALL_LEVEL = {"marker", "hatch", "zorder"}
 # more exist but I don't think those heve thei place : cmap, norm, vmin, vmax, 
 # may be in future: rasterized, hatch no sure hatch can be applied to scatter plot mauy end up using collection patch?
@@ -80,6 +185,7 @@ def plot_volcano(df,
                  label_genes = None,
                  label_genes_line = False,
                  label_top = None, # take int label the top X gene over and under expressed (so *2 labels)
+                 label_column = None, # inseatd of using the index look into this column for label name # label_genes must be from this columns
                  x="log2FoldChange", y = "padj",
                  x_thr=1, y_thr=0.01, 
                  display_grid=True, 
@@ -99,7 +205,7 @@ def plot_volcano(df,
                  size=5, color_base="grey",
                  width=12, height=7.5,
                  custom_ax = None,
-                 savefig=None, title="Title",
+                 savefig=None, title="",
                 return_fig=False, legend_bbox=(1.01, 0.5), **scatter_kwargs):
 
 
@@ -161,6 +267,7 @@ def plot_volcano(df,
         [(lambda d: (d[y] >= 2) ^ (abs(d[x]) <= 1), { "color": "blue"})]
 
         USing a label key work in the override, will add it to the legends
+        list selectors match label_column if set, otherwise the index.
 
     color_sig : str, default "#F7DDAA"
         gene that pass the  p-value threshold but not the log folchange threshold.
@@ -218,9 +325,11 @@ def plot_volcano(df,
 
     if custom_ax is not None and (return_fig or savefig is not None):
         raise ValueError("custom_ax argument is not compatible with return_fig or savefig argument")
-    
-    df = df.dropna(subset=[x, y])
-    df = df.copy()
+
+    df = prep_df(df, x, y, pval_floor)
+
+    if df.empty:
+        raise ValueError("Data Frame is empty after nan removal")
 
     if not highlights:
         highlights = []
@@ -231,79 +340,14 @@ def plot_volcano(df,
     if not label_genes:
         label_genes = None
 
-    highlights_default = []
-    if not (y_thr is None or x_thr is None or no_default):
-        highlights_default = [
-             (lambda d: (d[y] <= y_thr) & (abs(d[x]) <= x_thr), { "c": color_sig, "s": size, "alpha": alpha, "marker": ".", "zorder": 1}),
-             (lambda d: (d[y] >= y_thr) ^ (abs(d[x]) <= x_thr), { "c": color_ns, "s": size, "alpha": alpha, "marker": ".", "zorder": 1}),
 
-             (lambda d: (d[y] > y_thr) & (d[x] > x_thr), { "c": color_up, "s": size, "alpha": alpha, "marker": ".", "zorder": 1}),
-             (lambda d: (d[y] > y_thr) & (d[x] < -x_thr), { "c": color_down, "s": size, "alpha": alpha, "marker": ".", "zorder": 1}),
-
-             (lambda d: (d[y] <= y_thr) & (d[x] > x_thr), { "c": color_up_sig, "s": size, "alpha": alpha, "marker": ".", "label": "Overexpressed", "zorder": 1}),
-             (lambda d: (d[y] <= y_thr) & (d[x] < -x_thr), { "c": color_down_sig, "s": size, "alpha": alpha, "marker": ".", "label": "Underexpressed", "zorder": 1})
-             ]
-
-
-    if custom_ax:
-        ax = custom_ax
-    else:
-        fig , ax = plt.subplots(figsize=(width, height))
-        fig.patch.set_facecolor(color_bg)
     
-    if pval_floor:
-        min_ = sys.float_info.min
-    else:
-        min_ = min(df[df[y] >0][y])
-        
-    df["neglog10"] = -np.log10(df[y].clip(lower=min_))
-    df["x"] = df[x]
-    df["y"] = df[y]
-
-    legend = {}
-    #pop the label()
-    for (sel, ov)  in highlights_default:
-        label = ov.pop("label", None)
-        if label:
-            legend[label] = {**scatter_kwargs, **ov}
-
-    for (sel, ov)  in highlights:
-        label = ov.pop("label", None)
-        zorder = ov.pop("zorder", 2)
-        if label:
-            legend[label] = {"zorder": zorder, **scatter_kwargs, **ov}
-            
+    highlights_default = get_highlight_default()
+    legend = prep_legend(highlights_default, highlights, **scatter_kwargs)
 
     style = {"c": color_base, "zorder": 1, "s": size, "alpha" :alpha, "marker": '.', **scatter_kwargs}
-    # apply default style
-    n = len(df)
-    arrays = {k: _full(len(df), v) for k, v in style.items()}
-    for (selector, override) in highlights_default:
-        mask = _resolve(df, selector)
-        for key, v in override.items():
-            if key not in arrays:                 # property not in base → create it
-                arrays[key] = _full(n, v)         
-            a = arrays[key]
-            if a.dtype == object:                 # assign as list so tuples don't broadcast
-                a[mask] = [v] * int(np.count_nonzero(mask))
-            else:
-                a[mask] = v
-                
-    #arrays = {k: _full(len(df), v) for k, v in style.items()}
-    # apply custom style if any
-    drawn_last = np.zeros(len(df), dtype=bool)
-    for (selector, override) in highlights:
-        mask = _resolve(df, selector)
-        drawn_last |= mask
-        for key, v in override.items():
-            if key not in arrays:                 # property not in base → create it
-                arrays[key] = _full(n, v)         # baseline = its own value; see note
-            a = arrays[key]
-            if a.dtype == object:                 # assign as list so tuples don't broadcast
-                a[mask] = [v] * int(np.count_nonzero(mask))
-            else:
-                a[mask] = v
 
+    (arrays, drawn_last) =  get_array_style(df, highlights_default, highlights, style, label_column)
     # mpl is annoying those cn only be passed per call not per array
     # use this so modified point are plotted on top.
     
@@ -312,6 +356,12 @@ def plot_volcano(df,
     group_df = pd.DataFrame(sub)
     indices_same_call_level = group_df.groupby(list(sub), sort=False, dropna=False).indices
 
+    # start plotting
+    if custom_ax:
+        ax = custom_ax
+    else:
+        fig , ax = plt.subplots(figsize=(width, height))
+        fig.patch.set_facecolor(color_bg)
     
     for index in sorted(indices_same_call_level.values(), key=lambda p: drawn_last[p[0]]):
         per_call = {k: arrays[k][index[0]] for k in CALL_LEVEL if k in arrays }
@@ -319,33 +369,23 @@ def plot_volcano(df,
         ax.scatter(df[x].values[index], df["neglog10"].values[index],
                    **per_array, **per_call)
 
+
+    # may tweak this part
     
+
+    index_to_get = get_index_point_to_labels(df, x_thr=x_thr, label_top=label_top, label_column=label_column)
     texts_ = []
-    genes = []
+    if index_to_get:
 
-    if label_top:
-        genes.extend(list(df[(df["x"] < -x_thr) ].sort_values("y").head(label_top).index))
-        genes.extend(list(df[(df["x"] > x_thr) ].sort_values("y").head(label_top).index))
+        sub = df[df.index.isin(index_to_get)]
 
-    if label_genes: 
-        if isinstance(label_genes, str):
-            label_genes = [label_genes]
-
-        missing = set(label_genes) - set(df.index)
-
-        if missing:
-            # TODO LOG
-            print(f"WARNING: genes not found: {missing}", file=sys.stderr)
-
-        genes.extend(label_genes)
-
-    if genes:
-
-        sub = df[df.index.isin(genes)]
-        text = list(sub.index)
+        if label_column is not None:
+            text = list(sub[label_column])
+        else:
+            text = list(sub.index)
         x_axis = x 
-        X = sub.apply(lambda x: x[x_axis], axis=1)
-        Y = sub.apply(lambda x: x["neglog10"], axis=1)
+        X = sub[x_axis]
+        Y = sub["neglog10"]
         for i, v in enumerate(text):
             texts_.append(ax.text(x=X.iloc[i], y=Y.iloc[i], s=v, fontsize=10))
 
