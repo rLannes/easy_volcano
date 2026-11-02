@@ -232,14 +232,14 @@ def plot_volcano(df,
     highlights_default = []
     if not (y_thr is None or x_thr is None or no_default):
         highlights_default = [
-             (lambda d: (d[y] <= y_thr) & (abs(d[x]) <= x_thr), { "c": color_sig, "s": size, "alpha": alpha, "marker": "."}),
-             (lambda d: (d[y] >= y_thr) ^ (abs(d[x]) <= x_thr), { "c": color_ns, "s": size, "alpha": alpha, "marker": "."}),
+             (lambda d: (d[y] <= y_thr) & (abs(d[x]) <= x_thr), { "c": color_sig, "s": size, "alpha": alpha, "marker": ".", "zorder": 1}),
+             (lambda d: (d[y] >= y_thr) ^ (abs(d[x]) <= x_thr), { "c": color_ns, "s": size, "alpha": alpha, "marker": ".", "zorder": 1}),
 
-             (lambda d: (d[y] > y_thr) & (d[x] > x_thr), { "c": color_up, "s": size, "alpha": alpha, "marker": "."}),
-             (lambda d: (d[y] > y_thr) & (d[x] < -x_thr), { "c": color_down, "s": size, "alpha": alpha, "marker": "."}),
+             (lambda d: (d[y] > y_thr) & (d[x] > x_thr), { "c": color_up, "s": size, "alpha": alpha, "marker": ".", "zorder": 1}),
+             (lambda d: (d[y] > y_thr) & (d[x] < -x_thr), { "c": color_down, "s": size, "alpha": alpha, "marker": ".", "zorder": 1}),
 
-             (lambda d: (d[y] <= y_thr) & (d[x] > x_thr), { "c": color_up_sig, "s": size, "alpha": alpha, "marker": ".", "label": "Overexpressed"}),
-             (lambda d: (d[y] <= y_thr) & (d[x] < -x_thr), { "c": color_down_sig, "s": size, "alpha": alpha, "marker": ".", "label": "Underexpressed"})
+             (lambda d: (d[y] <= y_thr) & (d[x] > x_thr), { "c": color_up_sig, "s": size, "alpha": alpha, "marker": ".", "label": "Overexpressed", "zorder": 1}),
+             (lambda d: (d[y] <= y_thr) & (d[x] < -x_thr), { "c": color_down_sig, "s": size, "alpha": alpha, "marker": ".", "label": "Underexpressed", "zorder": 1})
              ]
 
 
@@ -265,11 +265,12 @@ def plot_volcano(df,
 
     for (sel, ov)  in highlights:
         label = ov.pop("label", None)
+        zorder = ov.pop("zorder", 2)
         if label:
-            legend[label] = {**scatter_kwargs, **ov}
+            legend[label] = {"zorder": zorder, **scatter_kwargs, **ov}
             
 
-    style = {"c": color_base, "s": size, "alpha" :alpha, "marker": '.', **scatter_kwargs}
+    style = {"c": color_base, "zorder": 1, "s": size, "alpha" :alpha, "marker": '.', **scatter_kwargs}
     # apply default style
     n = len(df)
     arrays = {k: _full(len(df), v) for k, v in style.items()}
@@ -301,23 +302,29 @@ def plot_volcano(df,
 
     # mpl is annoying those cn only be passed per call not per array
     # use this so modified point are plotted on top.
-    sub = (dict(k, v)  for k v in arrays.items() if k in CALL_LEVEL)
-    pd.DataFrame(arrays)
-    base = ~drawn_last
+    sub = dict((k, v)  for (k, v) in arrays.items() if k in CALL_LEVEL)
+    
+    group_df = pd.DataFrame(sub)
+    indices_same_call_level = group_df.groupby(list(sub), sort=False, dropna=False).indices
 
+    sub["_top_layer"] = drawn_last
+    for index in sorted(indices_same_call_level.values(), key=lambda p: p["_top_layer"]):
+        per_call = {k: arrays[k][index[0]] for k in CALL_LEVEL if k in arrays }
+        per_array = {k: arrays[v][index] for (k,v) in arrays.items() if k not in CALL_LEVEL }
+        ax.scatter(df[x].values[index], df["neglog10"].values[index],
+                   **per_array, **per_call)
 
+    #base = ~drawn_last
+    #ax.scatter(x = df[x].values[base],
+    #           y = df["neglog10"].values[base],
+    #           zorder=1,
+    #           **{k: v[base] for k, v in arrays.items()})
 
-
-    ax.scatter(x = df[x].values[base],
-               y = df["neglog10"].values[base],
-               zorder=1,
-               **{k: v[base] for k, v in arrays.items()})
-
-    if drawn_last.any():
-        ax.scatter(x = df[x].values[drawn_last],
-               y = df["neglog10"].values[drawn_last],
-               zorder=3,
-               **{k: v[drawn_last] for k, v in arrays.items()})
+    #if drawn_last.any():
+    #    ax.scatter(x = df[x].values[drawn_last],
+    #           y = df["neglog10"].values[drawn_last],
+    #           zorder=3,
+    #           **{k: v[drawn_last] for k, v in arrays.items()})
 
     
     texts_ = []
@@ -329,7 +336,7 @@ def plot_volcano(df,
         Y = sub.apply(lambda x: x["neglog10"], axis=1)
         obj = []
         for i, v in enumerate(text):
-            texts_.append(ax.text(x=X.iloc[i], y=Y.iloc[i], s=v, zorder=15, fontsize=10))
+            texts_.append(ax.text(x=X.iloc[i], y=Y.iloc[i], s=v, fontsize=10))
         if label_genes_line:
             adjustText.adjust_text(texts_, expand=(1, 1),  arrowprops=dict(arrowstyle='-', color='black'))
         else:
