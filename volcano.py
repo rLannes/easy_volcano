@@ -309,9 +309,9 @@ def plot_volcano(df,
     indices_same_call_level = group_df.groupby(list(sub), sort=False, dropna=False).indices
 
     
-    for index in sorted(indices_same_call_level.values(), key=lambda p: p["_top_layer"]):
+    for index in sorted(indices_same_call_level.values(), key=lambda p: drawn_last[p[0]]):
         per_call = {k: arrays[k][index[0]] for k in CALL_LEVEL if k in arrays }
-        per_array = {k: arrays[v][index] for (k,v) in arrays.items() if k not in CALL_LEVEL }
+        per_array = {k: v[index] for (k,v) in arrays.items() if k not in CALL_LEVEL }
         ax.scatter(df[x].values[index], df["neglog10"].values[index],
                    **per_array, **per_call)
 
