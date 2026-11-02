@@ -31,12 +31,22 @@ import numpy as np
 import pandas as pd
 import sys
 import adjustText
+import functools
 
 import logging
 logger = logging.getLogger(__name__)
 
 mpl.rcParams["font.stretch"] = "expanded"
 plt.rcParams['pdf.fonttype'] = 42
+
+_MPL_STYLE = { "font.stretch" : "expanded", 'pdf.fonttype':  42 }
+# decorator 
+def _with_rc_param(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        with mpl.rc_context(_MPL_STYLE):
+            return func(*args, **kwargs)
+    return wrapper
 
 # sentinel 
 _UNSET = object()
@@ -159,8 +169,8 @@ def get_highlight_default(y_thr, x_thr, no_default, x, y, color_sig, color_ns, c
                 (lambda d: (d[y] > y_thr) & (d[x] >= x_thr), { "c": color_up}),
                 (lambda d: (d[y] > y_thr) & (d[x] <= -x_thr), { "c": color_down}),
 
-                (lambda d: (d[y] <= y_thr) & (d[x] >= x_thr), { "c": color_up_sig, "label": "Overexpressed", "zorder": 1}),
-                (lambda d: (d[y] <= y_thr) & (d[x] <= -x_thr), { "c": color_down_sig,  "label": "Underexpressed", "zorder": 1})
+                (lambda d: (d[y] <= y_thr) & (d[x] >= x_thr), { "c": color_up_sig, "label": "Overexpressed"}),
+                (lambda d: (d[y] <= y_thr) & (d[x] <= -x_thr), { "c": color_down_sig,  "label": "Underexpressed"})
                 ]
         return highlights_default
 
@@ -205,7 +215,7 @@ CALL_LEVEL = {"marker", "hatch", "zorder"}
 # more exist but I don't think those heve thei place : cmap, norm, vmin, vmax, 
 # may be in future: rasterized, hatch no sure hatch can be applied to scatter plot mauy end up using collection patch?
 
-
+@_with_rc_param
 def plot_volcano(df,
                  pval_floor=False,
                  color_bg = "white",
@@ -293,11 +303,11 @@ def plot_volcano(df,
 
         d[x] and d[y] refer to the "x" argument and the "y" argument (usualy lfc and pvalue).
         you can also use any coluns present in the dataframe df.
-        [(lambda d: (d[y] >= 2) ^ (abs(d[x]) <= 1), { "color": "blue"})]
+        [(lambda d: (d[y] >= 2) & (abs(d[x]) <= 1), { "color": "blue"})]
 
         USing a label key work in the override, will add it to the legends
         list selectors match label_column if set, otherwise the index.
-
+s
     color_sig : str, default "#F7DDAA"
         gene that pass the  p-value threshold but not the log folchange threshold.
         (y > y_thr AND abs(x) > x_thr)
