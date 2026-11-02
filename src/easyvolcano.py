@@ -32,8 +32,14 @@ import pandas as pd
 import sys
 import adjustText
 
+import logging
+logger = logging.getLogger(__name__)
+
 mpl.rcParams["font.stretch"] = "expanded"
 plt.rcParams['pdf.fonttype'] = 42
+
+# sentinel 
+_UNSET = object()
 
 def _resolve(df, selector, label_col=None):
     """
@@ -71,13 +77,28 @@ def mpl_norm_symbol(override, alias=_ALIASES):
 
 
 def prep_df(df, x, y, pval_floor):
-        df = df.dropna(subset=[x, y])
+        
+        n0 = len(df)
         df = df.copy()
+        df = df.dropna(subset=[x, y])
+        if df.empty:
+            raise ValueError("Data Frame is empty after nan removal")
+        
+        positive = df.loc[df[y] > 0, y]
+        if positive.empty:
+            raise ValueError(f"all the p-value ({y!r}) are either negative or zeros; there is a likely issue with your data. check your input is your data already -log10 transformed?")
+
+        if len(df) < n0:
+            logger.info("Dropped {} NA rows".format(n0 - len(df)))
 
         if pval_floor:
+            logger.info("using sys.float_info.min as pvlaue floor")
             min_ = sys.float_info.min
         else:
+            logger.info("using min(df[pvalue]) as pvalue floor")
             min_ = min(df[df[y] >0][y])
+
+        logger.info("pvalue floor: {}".format(min_))
 
         df["neglog10"] = -np.log10(df[y].clip(lower=min_))
         df["x"] = df[x]
@@ -94,29 +115,31 @@ def prep_legend(highlights_default, highlights, **scatter_kwargs):
 
     for (sel, ov)  in highlights:
         label = ov.pop("label", None)
-        zorder = ov.pop("zorder", 2)
+        zorder = ov.get("zorder", 2)
         if label:
             legend[label] = {"zorder": zorder, **scatter_kwargs, **ov}
     return legend
 
-def get_index_point_to_labels(df, x_thr=1, label_top=None, label_column=None):
+def get_index_point_to_labels(df, x_thr=1, label_genes=None, label_top=None, label_column=None):
 
     index_to_get = []
     if label_top:
-        index_to_get.extend(list(df[(df["x"] < -x_thr) ].sort_values("y").head(label_top).index))
-        index_to_get.extend(list(df[(df["x"] > x_thr) ].sort_values("y").head(label_top).index))
+        x_t = x_thr if x_thr is not None else 0
+        index_to_get.extend(list(df[(df["x"] < -x_t) ].sort_values("y").head(label_top).index))
+        index_to_get.extend(list(df[(df["x"] > x_t) ].sort_values("y").head(label_top).index))
 
-    if label_genes: 
+    if label_genes is not None: 
         if isinstance(label_genes, str):
             label_genes = [label_genes]
+        label_genes = list(label_genes)
+
         if label_column is not None:
             missing = set(label_genes) - set(df[label_column])
         else:
             missing = set(label_genes) - set(df.index)
 
         if missing:
-            # TODO LOG
-            print(f"WARNING: genes not found: {missing}", file=sys.stderr)
+            logger.warning(f"genes not found: {missing}")
 
         if label_column is not None :
             index_to_get.extend(df[df[label_column].isin(label_genes)].index)
@@ -126,18 +149,18 @@ def get_index_point_to_labels(df, x_thr=1, label_top=None, label_column=None):
     return index_to_get
 
 
-def get_highlight_default():
+def get_highlight_default(y_thr, x_thr, no_default, x, y, color_sig, color_ns, color_up, color_down, color_up_sig, color_down_sig):
         highlights_default = []
         if not (y_thr is None or x_thr is None or no_default):
             highlights_default = [
-                (lambda d: (d[y] <= y_thr) & (abs(d[x]) <= x_thr), { "c": color_sig, "s": size, "alpha": alpha, "marker": ".", "zorder": 1}),
-                (lambda d: (d[y] >= y_thr) ^ (abs(d[x]) <= x_thr), { "c": color_ns, "s": size, "alpha": alpha, "marker": ".", "zorder": 1}),
+                (lambda d: (d[y] <= y_thr) & (abs(d[x]) < x_thr), { "c": color_sig}),
+                (lambda d: (d[y] > y_thr) & (abs(d[x]) < x_thr), { "c": color_ns}),
 
-                (lambda d: (d[y] > y_thr) & (d[x] > x_thr), { "c": color_up, "s": size, "alpha": alpha, "marker": ".", "zorder": 1}),
-                (lambda d: (d[y] > y_thr) & (d[x] < -x_thr), { "c": color_down, "s": size, "alpha": alpha, "marker": ".", "zorder": 1}),
+                (lambda d: (d[y] > y_thr) & (d[x] >= x_thr), { "c": color_up}),
+                (lambda d: (d[y] > y_thr) & (d[x] <= -x_thr), { "c": color_down}),
 
-                (lambda d: (d[y] <= y_thr) & (d[x] > x_thr), { "c": color_up_sig, "s": size, "alpha": alpha, "marker": ".", "label": "Overexpressed", "zorder": 1}),
-                (lambda d: (d[y] <= y_thr) & (d[x] < -x_thr), { "c": color_down_sig, "s": size, "alpha": alpha, "marker": ".", "label": "Underexpressed", "zorder": 1})
+                (lambda d: (d[y] <= y_thr) & (d[x] >= x_thr), { "c": color_up_sig, "label": "Overexpressed", "zorder": 1}),
+                (lambda d: (d[y] <= y_thr) & (d[x] <= -x_thr), { "c": color_down_sig,  "label": "Underexpressed", "zorder": 1})
                 ]
         return highlights_default
 
@@ -149,10 +172,12 @@ def get_array_style(df, highlights_default, highlights, style, label_column):
             mask = _resolve(df, selector)
             for key, v in override.items():
                 if key not in arrays:                 # property not in base → create it
-                    arrays[key] = _full(n, v)         
+                    arrays[key] = np.full(n, _UNSET, dtype=object) # baseline sentinel       
                 a = arrays[key]
                 if a.dtype == object:                 # assign as list so tuples don't broadcast
-                    a[mask] = [v] * int(np.count_nonzero(mask))
+                    #a[mask] = [v] * int(np.count_nonzero(mask))
+                    for i in np.flatnonzero(mask):
+                        a[i] = v
                 else:
                     a[mask] = v
                     
@@ -164,10 +189,13 @@ def get_array_style(df, highlights_default, highlights, style, label_column):
             drawn_last |= mask
             for key, v in override.items():
                 if key not in arrays:                 # property not in base → create it
-                    arrays[key] = _full(n, v)         # baseline = its own value; see note
+                    arrays[key] = np.full(n, _UNSET, dtype=object) # baseline sentinel
+                    #arrays[key] = _full(n, v)         # baseline = its own value; see note
                 a = arrays[key]
                 if a.dtype == object:                 # assign as list so tuples don't broadcast
-                    a[mask] = [v] * int(np.count_nonzero(mask))
+                    #a[mask] = [v] * int(np.count_nonzero(mask))
+                    for i in np.flatnonzero(mask):
+                        a[i] = v
                 else:
                     a[mask] = v
         return arrays, drawn_last
@@ -197,12 +225,13 @@ def plot_volcano(df,
                 color_up_sig = "#D7191C",
                 color_down =  "#ABD9E9",
                 color_down_sig = "#2C7BB6",
+                marker = ".",
                 alpha=1,
 
                  show_thresholds_line=True,
                  no_default=False,
                  xlabel='$Log_{2}$ fold change', ylabel='$-Log_{10}$ adj.P',
-                 size=5, color_base="grey",
+                 size=10, color_base="grey",
                  width=12, height=7.5,
                  custom_ax = None,
                  savefig=None, title="",
@@ -328,8 +357,7 @@ def plot_volcano(df,
 
     df = prep_df(df, x, y, pval_floor)
 
-    if df.empty:
-        raise ValueError("Data Frame is empty after nan removal")
+
 
     if not highlights:
         highlights = []
@@ -337,21 +365,28 @@ def plot_volcano(df,
     highlights = [(sel, mpl_norm_symbol(over)) for (sel, over) in highlights]
     scatter_kwargs = mpl_norm_symbol(scatter_kwargs)
 
-    if not label_genes:
-        label_genes = None
+    if label_genes is not None:
+        if isinstance(label_genes, str):
+            label_genes = [label_genes]
+        label_genes = list(label_genes)
 
 
     
-    highlights_default = get_highlight_default()
+    highlights_default = get_highlight_default(y_thr, x_thr, no_default, x, y, color_sig, color_ns, color_up, color_down, color_up_sig, color_down_sig, size, alpha)
     legend = prep_legend(highlights_default, highlights, **scatter_kwargs)
 
-    style = {"c": color_base, "zorder": 1, "s": size, "alpha" :alpha, "marker": '.', **scatter_kwargs}
+    style = {"c": color_base, "zorder": 1, "s": size, "alpha" :alpha, "marker": marker, **scatter_kwargs}
 
     (arrays, drawn_last) =  get_array_style(df, highlights_default, highlights, style, label_column)
     # mpl is annoying those cn only be passed per call not per array
     # use this so modified point are plotted on top.
     
+    unset = {k : np.array([e is _UNSET for e in val])
+             for k, val in arrays.items() if val.dtype == object}
+    unset = {k: v for k, v in unset.items() if v.any()}
+
     sub = dict((k, v)  for (k, v) in arrays.items() if k in CALL_LEVEL)
+    sub.update({f"_unset_{k}": v for k, v in unset.items()})
     sub["_top_layer"] = drawn_last
     group_df = pd.DataFrame(sub)
     indices_same_call_level = group_df.groupby(list(sub), sort=False, dropna=False).indices
@@ -364,8 +399,10 @@ def plot_volcano(df,
         fig.patch.set_facecolor(color_bg)
     
     for index in sorted(indices_same_call_level.values(), key=lambda p: drawn_last[p[0]]):
-        per_call = {k: arrays[k][index[0]] for k in CALL_LEVEL if k in arrays }
-        per_array = {k: v[index] for (k,v) in arrays.items() if k not in CALL_LEVEL }
+        first = index[0]
+        keep = lambda k: arrays[k][first] is not _UNSET
+        per_call = {k: arrays[k][index[0]] for k in CALL_LEVEL if k in arrays and keep(k)}
+        per_array = {k: v[index] for (k,v) in arrays.items() if k not in CALL_LEVEL and keep(k)}
         ax.scatter(df[x].values[index], df["neglog10"].values[index],
                    **per_array, **per_call)
 
@@ -373,7 +410,11 @@ def plot_volcano(df,
     # may tweak this part
     
 
-    index_to_get = get_index_point_to_labels(df, x_thr=x_thr, label_top=label_top, label_column=label_column)
+    index_to_get = get_index_point_to_labels(df, x_thr=x_thr,
+                                              label_genes=label_genes,
+                                                label_top=label_top, 
+                                                label_column=label_column)
+    
     texts_ = []
     if index_to_get:
 
@@ -426,9 +467,9 @@ def plot_volcano(df,
 
     # plot a quick summary of the data
     txt = ''
-    if x_thr and y_thr:
-        up = df[(df["neglog10"]< -math.log(y_thr, 10)) & (df[x] > x_thr)].shape[0]
-        down =  df[(df["neglog10"]< -math.log(y_thr, 10)) & (df[x] < -x_thr)].shape[0]
+    if x_thr is not None and y_thr is not None:
+        up = df[(df[y] <= y_thr) & (df[x] >= x_thr)].shape[0]
+        down =  df[(df[y] <= y_thr) & (df[x] <= -x_thr)].shape[0]
         ns = df.shape[0] - (up + down)
         txt = "\n\nup {}; down {}; ns {}".format(up, down, ns )
 
@@ -436,7 +477,7 @@ def plot_volcano(df,
     ax.set_xlabel(xlabel , fontsize=24)
 
     if txt:
-        plt.figtext(0.5, -0.05, txt, wrap=True, horizontalalignment='center', fontsize=16)
+        ax.figure.text(0.5, -0.05, txt, wrap=True, horizontalalignment='center', fontsize=16)
 
     ##
     legend_elements = []
