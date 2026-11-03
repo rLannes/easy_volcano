@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[project]
+name = "easyvolcano"
+dynamic = ["version"]          # taken from the git tag (vX.Y.Z) by hatch-vcs
+description = "Volcano plots for gene differential-expression results."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"                # TODO: confirm and add a LICENSE file
+authors = [{ name = "Romain Lannes", email = "rlannes@wi.mit.edu" }]  # TODO: confirm
+keywords = ["volcano plot", "differential expression", "DESeq2", "bioinformatics", "matplotlib"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
+dependencies = [
+    "matplotlib>=3.10.9",
+    "numpy>=2.2.6",
+    "pandas>=2.3.3",
+    "adjustText>=1.4",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[project.urls]
+Homepage = "https://github.com/rLannes/easy_volcano"
+Issues = "https://github.com/rLannes/easy_volcano/issues"
+
+# --- versioning: version comes from the latest git tag (v1.2.3 -> 1.2.3) ---
+[tool.hatch.version]
+source = "vcs"
+raw-options = { fallback_version = "0.0.0" }
+
+# --- build: ship src/easyvolcano.py as the top-level module `easyvolcano` ---
+[tool.hatch.build.targets.wheel]
+only-include = ["src/easyvolcano.py"]
+sources = ["src"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/easyvolcano.py", "tests", "README.md"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
