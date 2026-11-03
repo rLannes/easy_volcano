@@ -382,7 +382,7 @@ s
 
 
     
-    highlights_default = get_highlight_default(y_thr, x_thr, no_default, x, y, color_sig, color_ns, color_up, color_down, color_up_sig, color_down_sig, size, alpha)
+    highlights_default = get_highlight_default(y_thr, x_thr, no_default, x, y, color_sig, color_ns, color_up, color_down, color_up_sig, color_down_sig)
     legend = prep_legend(highlights_default, highlights, **scatter_kwargs)
 
     style = {"c": color_base, "zorder": 1, "s": size, "alpha" :alpha, "marker": marker, **scatter_kwargs}
