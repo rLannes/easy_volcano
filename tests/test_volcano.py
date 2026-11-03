@@ -64,7 +64,7 @@ def spy_ax(monkeypatch):
 
 
 def _default_colors(prepped):
-    hd = ev.get_highlight_default(0.01, 1, False, X, Y, size=5, alpha=1, **COLORS)
+    hd = ev.get_highlight_default(0.01, 1, False, X, Y, **COLORS)
     style = {"c": "base", "zorder": 1, "s": 5, "alpha": 1, "marker": "."}
     arrays, _ = ev.get_array_style(prepped, hd, [], style, None)
     return dict(zip(prepped.index, arrays["c"]))
@@ -212,7 +212,7 @@ def test_every_point_gets_a_category_colour(prepped):
 @pytest.mark.parametrize("kw", [dict(no_default=True), dict(x_thr=None), dict(y_thr=None)])
 def test_no_default_colouring(kw):
     args = dict(y_thr=0.01, x_thr=1, no_default=False) | kw
-    assert ev.get_highlight_default(x=X, y=Y, size=5, alpha=1, **args, **COLORS) == []
+    assert ev.get_highlight_default(x=X, y=Y, **args, **COLORS) == []
 
 
 # --------------------------------------------------------------------------- #
