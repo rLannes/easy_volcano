@@ -251,7 +251,7 @@ def plot_volcano(df,
                  display_grid=True, 
                  highlights=None, 
                 
-                color_sig = "#F7DDAA",
+                color_sig = "darkgrey",
                 color_ns = "lightgrey",
                 color_up = "#FDAE61",
                 color_up_sig = "#D7191C",
