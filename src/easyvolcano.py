@@ -511,7 +511,7 @@ s
         X = sub[x_axis]
         Y = sub["neglog10"]
         for i, v in enumerate(text):
-            texts_.append(ax.text(x=X.iloc[i], y=Y.iloc[i], s=v, **label_format))
+            texts_.append(ax.text(x=X.iloc[i], y=Y.iloc[i], s=v, ha="center", va="center", **label_format))
 
 
     if texts_:
