@@ -493,9 +493,9 @@ s
 
     if texts_:
         if label_genes_line:
-            adjustText.adjust_text(texts_, expand=(1, 1),  arrowprops=dict(arrowstyle='-', color='black'))
+            adjustText.adjust_text(texts_, expand=(1.05, 1.2),  arrowprops=dict(arrowstyle='-', color='black'))
         else:
-            adjustText.adjust_text(texts_, expand=(1, 1))
+            adjustText.adjust_text(texts_, expand=(1.05, 1.2))
     
     if display_grid:
         
