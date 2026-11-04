@@ -235,11 +235,12 @@ def _parse_label_format(label_format):
 @_with_rc_param
 def plot_volcano(df,
                  *,
-                 pval_floor=False,
-                 clip_pval = None,# turn pval_floor to false and clip column y to this value. (for plotting)
+# turn pval_floor to false and clip column y to this value. (for plotting)
                  color_bg = "white",
                  x="log2FoldChange", y = "padj",
                  x_thr=1, y_thr=0.01, 
+                pval_floor=False,
+                 clip_pval = None,
 
                  label_genes = None,
                  label_genes_line = False,
@@ -263,7 +264,7 @@ def plot_volcano(df,
                  no_default=False,
                  xlabel='$Log_{2}$ fold change', ylabel='$-Log_{10}$ adj.P',
                  size=50, color_base="grey",
-                 width=12, height=7.5,
+                 width=8, height=4.8,
                  ax = None,
                  rasterize = False, # if set override any other arg and rasterize all
                  savefig=None, title="",
@@ -291,16 +292,43 @@ def plot_volcano(df,
     Parameters
     ----------
     df : pd.DataFrame
-        Rows containing any NA in the required column (lfc and padj) are dropped
-            before plotting.
+        Rows containing any NA are dropped before plotting.
+    color_bg : str, default "white",
+    x : str , default "log2FoldChange"
+        column used for the X-axis
+    y : str , default "padj",
+        column used for the Y-axis
+    x_thr : float, default 1,
+        X-axis threshold used for coloring, summarizing count and plotting lines
+    y_thr : float, default 0.01, 
+        Y-axis threshold used for coloring, summarizing count and plotting lines
+    
+    ----------
+    ## p-val cap
+        By default easyvolcano shrink the Y axis to the smallest value present in df.
+        p-value of zeros are transformed to this values (needed for the log transform). 
+    clip_pval : float: default None
+        if set superseed pval_floor, clip all pvalue smaller than 'clip_pval' to 'clip_pval'
+    pval_floor : boolean, default False,
+        if set  p-value of zeros are transformed to sys.float_info.min. 
+    ----------
+
+    ----------
+    ## label
+    label_genes = None,
+    label_genes_line = False,
+    label_top = None, # take int label the top X gene over and under expressed (so *2 labels)
+    label_column = None, # inseatd of using the index look into this column for label name # label_genes must be from this columns
+    label_format = _LABEL_FORMAT_DEFAULT,
+    ----------
+
     alpha : float, default 1
         Point transparency passed to scatter.
-    width, height : float, default 12, 7.5
-        Figure size in inches.
-    pval_floor : bool, default False
-        Floor used to avoid log10(0). If True, clip p-values at the smallest
-        positive float (sys.float_info.min); if False, clip at the smallest
-        positive value observed in column `y`.
+    width, float, default 8
+        Figure width in inches.
+    height : float, default, 4.5
+        Figure height in inches.
+
     color_bg : str, default "white"
         Figure background colour.
     label_genes : set of str, default empty
@@ -522,8 +550,9 @@ s
             legend_elements.append(Line2D([0], [0],  marker=m,
                                         markerfacecolor=c, color='w', label=k, markersize=25))
         if legend_elements:
-            ax.legend(handles=legend_elements, bbox_to_anchor=legend_bbox)
+            ax.legend(handles=legend_elements, bbox_to_anchor=legend_bbox, loc='center left')
 
+    plt.tight_layout()
     if savefig:
         fig.savefig(savefig, bbox_inches="tight")
 
