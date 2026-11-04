@@ -86,7 +86,7 @@ def mpl_norm_symbol(override, alias=_ALIASES):
     return new
 
 
-def prep_df(df, x, y, pval_floor, clip_pval):
+def prep_df(df, x, y, pval_floor, clip_pval=None):
         
         n0 = len(df)
         df = df.copy()
@@ -98,14 +98,14 @@ def prep_df(df, x, y, pval_floor, clip_pval):
         if positive.empty:
             raise ValueError(f"all the p-value ({y!r}) are either negative or zeros; there is a likely issue with your data. check your input is your data already -log10 transformed?")
 
-        if clip_pval:
-            if (clip_pval <= 0) or (clip_pval>=1) :
-                raise ValueError(f"clip pval must be in range [0-1]. It was {clip_pval}")
-            
         if len(df) < n0:
             logger.info("Dropped {} NA rows".format(n0 - len(df)))
 
-        if pval_floor:
+        if clip_pval:
+            if (clip_pval <= 0) or (clip_pval>=1) :
+                raise ValueError(f"clip pval must be in range [0-1]. It was {clip_pval}")
+            min_ = clip_pval
+        elif pval_floor:
             logger.info("using sys.float_info.min as pvlaue floor")
             min_ = sys.float_info.min
         else:
