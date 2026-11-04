@@ -86,7 +86,7 @@ def mpl_norm_symbol(override, alias=_ALIASES):
     return new
 
 
-def prep_df(df, x, y, pval_floor):
+def prep_df(df, x, y, pval_floor, clip_pval):
         
         n0 = len(df)
         df = df.copy()
@@ -98,6 +98,10 @@ def prep_df(df, x, y, pval_floor):
         if positive.empty:
             raise ValueError(f"all the p-value ({y!r}) are either negative or zeros; there is a likely issue with your data. check your input is your data already -log10 transformed?")
 
+        if clip_pval:
+            if (clip_pval <= 0) or (clip_pval>=1) :
+                raise ValueError(f"clip pval must be in range [0-1]. It was {clip_pval}")
+            
         if len(df) < n0:
             logger.info("Dropped {} NA rows".format(n0 - len(df)))
 
@@ -159,6 +163,7 @@ def get_index_point_to_labels(df, x_thr=1, label_genes=None, label_top=None, lab
     return index_to_get
 
 
+
 def get_highlight_default(y_thr, x_thr, no_default, x, y, color_sig, color_ns, color_up, color_down, color_up_sig, color_down_sig):
         highlights_default = []
         if not (y_thr is None or x_thr is None or no_default):
@@ -210,22 +215,38 @@ def get_array_style(df, highlights_default, highlights, style, label_column):
                     a[mask] = v
         return arrays, drawn_last
 
-    
-CALL_LEVEL = {"marker", "hatch", "zorder"}
-# more exist but I don't think those heve thei place : cmap, norm, vmin, vmax, 
+CALL_LEVEL = {"marker", "hatch", "zorder", "rasterized"}
+# more exist but I don't think those heve their place : cmap, norm, vmin, vmax, 
 # may be in future: rasterized, hatch no sure hatch can be applied to scatter plot mauy end up using collection patch?
+
+_LABEL_FORMAT_DEFAULT = {"fontsize": 10, "fontstyle": "normal"}
+_BLACK_LIST_LABEL_FORMAT = ["x", "y", "s", "position", "text"]
+def _parse_label_format(label_format):
+
+    label_format = {**_LABEL_FORMAT_DEFAULT, **(label_format or {})}
+    for e in _BLACK_LIST_LABEL_FORMAT:
+
+        if e in  label_format:
+            raise ValueError(f"label_format cannot contain {e!r} as key")
+
+    return label_format
+
 
 @_with_rc_param
 def plot_volcano(df,
+                 *,
                  pval_floor=False,
+                 clip_pval = None,# turn pval_floor to false and clip column y to this value. (for plotting)
                  color_bg = "white",
+                 x="log2FoldChange", y = "padj",
+                 x_thr=1, y_thr=0.01, 
 
                  label_genes = None,
                  label_genes_line = False,
                  label_top = None, # take int label the top X gene over and under expressed (so *2 labels)
                  label_column = None, # inseatd of using the index look into this column for label name # label_genes must be from this columns
-                 x="log2FoldChange", y = "padj",
-                 x_thr=1, y_thr=0.01, 
+                 label_format = _LABEL_FORMAT_DEFAULT,
+
                  display_grid=True, 
                  highlights=None, 
                 
@@ -241,11 +262,15 @@ def plot_volcano(df,
                  show_thresholds_line=True,
                  no_default=False,
                  xlabel='$Log_{2}$ fold change', ylabel='$-Log_{10}$ adj.P',
-                 size=10, color_base="grey",
+                 size=50, color_base="grey",
                  width=12, height=7.5,
-                 custom_ax = None,
+                 ax = None,
+                 rasterize = False, # if set override any other arg and rasterize all
                  savefig=None, title="",
-                return_fig=False, legend_bbox=(1.01, 0.5), **scatter_kwargs):
+                 show_legend= True,
+                 legend_bbox=(1.01, 0.5),
+                show_text_summary = True,
+                **scatter_kwargs):
 
 
     """Draw a volcano plot from a differential-expression results table.
@@ -354,21 +379,16 @@ s
 
     Returns
     -------
-    None
+    (fig ax)
         The figure is drawn
         optional:
-            if return_fig == True  return the (fig, ax)
-        if savefig is not None save the figure
+            if savefig is not None and is a vlaid file save the figure
     """
 
-
-    if custom_ax is not None and (return_fig or savefig is not None):
-        raise ValueError("custom_ax argument is not compatible with return_fig or savefig argument")
-
-    df = prep_df(df, x, y, pval_floor)
+    df = prep_df(df, x, y, pval_floor, clip_pval)
 
 
-
+    label_format = _parse_label_format(label_format=label_format)
     if not highlights:
         highlights = []
 
@@ -402,28 +422,30 @@ s
     indices_same_call_level = group_df.groupby(list(sub), sort=False, dropna=False).indices
 
     # start plotting
-    if custom_ax:
-        ax = custom_ax
+    if ax is None:
+        fig , ax = plt.subplots(figsize=(width, height))        
     else:
-        fig , ax = plt.subplots(figsize=(width, height))
-        fig.patch.set_facecolor(color_bg)
-    
+        fig = ax.figure
+
+    ax.set_facecolor(color_bg)
+
     for index in sorted(indices_same_call_level.values(), key=lambda p: drawn_last[p[0]]):
         first = index[0]
         keep = lambda k: arrays[k][first] is not _UNSET
         per_call = {k: arrays[k][index[0]] for k in CALL_LEVEL if k in arrays and keep(k)}
         per_array = {k: v[index] for (k,v) in arrays.items() if k not in CALL_LEVEL and keep(k)}
+        if rasterize:
+            per_call["rasterized"] = True
         ax.scatter(df[x].values[index], df["neglog10"].values[index],
                    **per_array, **per_call)
 
 
     # may tweak this part
-    
-
     index_to_get = get_index_point_to_labels(df, x_thr=x_thr,
                                               label_genes=label_genes,
                                                 label_top=label_top, 
                                                 label_column=label_column)
+
     
     texts_ = []
     if index_to_get:
@@ -438,7 +460,7 @@ s
         X = sub[x_axis]
         Y = sub["neglog10"]
         for i, v in enumerate(text):
-            texts_.append(ax.text(x=X.iloc[i], y=Y.iloc[i], s=v, fontsize=10))
+            texts_.append(ax.text(x=X.iloc[i], y=Y.iloc[i], s=v, **label_format))
 
 
     if texts_:
@@ -475,38 +497,38 @@ s
     ax.set_title(title, fontsize=28)
     ax.spines[['right', 'top']].set_visible(False)
 
+    if show_text_summary:
     # plot a quick summary of the data
-    txt = ''
-    if x_thr is not None and y_thr is not None:
-        up = df[(df[y] <= y_thr) & (df[x] >= x_thr)].shape[0]
-        down =  df[(df[y] <= y_thr) & (df[x] <= -x_thr)].shape[0]
-        ns = df.shape[0] - (up + down)
-        txt = "\n\nup {}; down {}; ns {}".format(up, down, ns )
-
+        txt = ''
+        if x_thr is not None and y_thr is not None:
+            up = df[(df[y] <= y_thr) & (df[x] >= x_thr)].shape[0]
+            down =  df[(df[y] <= y_thr) & (df[x] <= -x_thr)].shape[0]
+            ns = df.shape[0] - (up + down)
+            txt = "\n\nup {}; down {}; ns {}".format(up, down, ns )
+        if txt:
+            ax.figure.text(0.5, -0.05, txt, wrap=True, horizontalalignment='center', fontsize=16)
+    
     ax.set_ylabel(ylabel, fontsize=24)
     ax.set_xlabel(xlabel , fontsize=24)
 
-    if txt:
-        ax.figure.text(0.5, -0.05, txt, wrap=True, horizontalalignment='center', fontsize=16)
-
     ##
-    legend_elements = []
-    for k, v in legend.items():
-        c = v.get("c")
-        if not c: 
-            c = v.get("color")
-        m = v.get("marker", ".")
-        legend_elements.append(Line2D([0], [0],  marker=m,
-                                       markerfacecolor=c, color='w', label=k, markersize=25))
-    if legend_elements:
-        ax.legend(handles=legend_elements, bbox_to_anchor=legend_bbox)
+    if show_legend:
+        legend_elements = []
+        for k, v in legend.items():
+            c = v.get("c")
+            if not c: 
+                c = v.get("color")
+            m = v.get("marker", ".")
+            legend_elements.append(Line2D([0], [0],  marker=m,
+                                        markerfacecolor=c, color='w', label=k, markersize=25))
+        if legend_elements:
+            ax.legend(handles=legend_elements, bbox_to_anchor=legend_bbox)
 
-    # can't be used if custom_ax is set
     if savefig:
         fig.savefig(savefig, bbox_inches="tight")
-    if return_fig:
-        return fig, ax
-    if custom_ax: 
-        return ax
+
+    return (fig, ax)
+
+
 
 

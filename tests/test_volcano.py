@@ -299,31 +299,35 @@ def test_label_top_without_x_thr_does_not_crash(prepped):
 # plot_volcano: API contract
 # --------------------------------------------------------------------------- #
 
-def test_plot_returns_none_by_default(df):
-    assert ev.plot_volcano(df) is None
-
-
-def test_plot_return_fig(df):
-    fig, ax = ev.plot_volcano(df, return_fig=True)
+def test_plot_returns_fig_and_ax(df):
+    fig, ax = ev.plot_volcano(df)
     assert ax.figure is fig
 
 
-def test_plot_custom_ax_returns_ax(df):
-    _, ax = plt.subplots()
-    assert ev.plot_volcano(df, custom_ax=ax) is ax
+def test_plot_given_ax_is_used_and_returned(df):
+    user_fig, user_ax = plt.subplots()
+    fig, ax = ev.plot_volcano(df, ax=user_ax)
+    assert ax is user_ax
+    assert fig is user_fig
+    assert len(user_ax.collections) > 0
 
 
-@pytest.mark.parametrize("kw", [dict(return_fig=True), dict(savefig="out.png")])
-def test_custom_ax_incompatible_args(df, kw):
-    _, ax = plt.subplots()
-    with pytest.raises(ValueError):
-        ev.plot_volcano(df, custom_ax=ax, **kw)
+def test_options_are_keyword_only(df):
+    with pytest.raises(TypeError):
+        ev.plot_volcano(df, False)
 
 
 @pytest.mark.parametrize("ext", ["png", "pdf", "svg"])
 def test_savefig(df, tmp_path, ext):
     path = tmp_path / f"volcano.{ext}"
     ev.plot_volcano(df, savefig=path)
+    assert path.stat().st_size > 0
+
+
+def test_savefig_with_given_ax(df, tmp_path):
+    path = tmp_path / "volcano.png"
+    _, ax = plt.subplots()
+    ev.plot_volcano(df, ax=ax, savefig=path)
     assert path.stat().st_size > 0
 
 
@@ -341,13 +345,13 @@ def test_plot_does_not_mutate_highlights(df):
 
 def test_custom_column_names(df):
     df = df.rename(columns={X: "logFC", Y: "adj.P.Val"})
-    fig, ax = ev.plot_volcano(df, x="logFC", y="adj.P.Val", return_fig=True)
+    fig, ax = ev.plot_volcano(df, x="logFC", y="adj.P.Val")
     assert len(ax.collections) > 0
 
 
 def test_duplicate_index(df):
     df.index = ["g1", "g1", "g2", "g3", "g4", "g5", "g6", "g6"]
-    _, ax = ev.plot_volcano(df, label_genes=["g1"], return_fig=True)
+    _, ax = ev.plot_volcano(df, label_genes=["g1"])
     assert [t.get_text() for t in ax.texts] == ["g1", "g1"]
 
 
@@ -357,27 +361,27 @@ def test_duplicate_index(df):
 
 def test_every_point_plotted_once(df, spy_ax):
     ax, calls = spy_ax
-    ev.plot_volcano(df, custom_ax=ax, highlights=[(["ENS1"], {"color": "red"})])
+    ev.plot_volcano(df, ax=ax, highlights=[(["ENS1"], {"color": "red"})])
     xs = np.concatenate([c["x"] for c in calls])
     assert sorted(xs) == sorted(df[X].dropna())
 
 
 def test_highlights_drawn_last(df, spy_ax):
     ax, calls = spy_ax
-    ev.plot_volcano(df, custom_ax=ax, highlights=[(["ENS1"], {"color": "red"})])
+    ev.plot_volcano(df, ax=ax, highlights=[(["ENS1"], {"color": "red"})])
     assert calls[-1]["x"].tolist() == [3]
 
 
 def test_highlight_zorder_is_applied(df, spy_ax):
     ax, calls = spy_ax
-    ev.plot_volcano(df, custom_ax=ax, highlights=[(["ENS1"], {"color": "red", "zorder": 5})])
+    ev.plot_volcano(df, ax=ax, highlights=[(["ENS1"], {"color": "red", "zorder": 5})])
     assert any(c.get("zorder") == 5 for c in calls)
 
 
 def test_new_property_not_passed_to_other_points(df, spy_ax):
     ax, calls = spy_ax
     # ENS2 is also on the top layer: only the "unset" grouping keeps it edge-free
-    ev.plot_volcano(df, custom_ax=ax, highlights=[(["ENS1"], {"edgecolors": "black"}),
+    ev.plot_volcano(df, ax=ax, highlights=[(["ENS1"], {"edgecolors": "black"}),
                                                   (["ENS2"], {"color": "red"})])
     with_edges = [c for c in calls if "edgecolors" in c]
     assert [c["x"].tolist() for c in with_edges] == [[3]]
@@ -388,58 +392,83 @@ def test_new_property_not_passed_to_other_points(df, spy_ax):
 
 def test_marker_kwarg_applies_to_all_points(df, spy_ax):
     ax, calls = spy_ax
-    ev.plot_volcano(df, custom_ax=ax, marker="^")
+    ev.plot_volcano(df, ax=ax, marker="^")
     assert {c["marker"] for c in calls} == {"^"}
 
 
 def test_labels_use_label_column(df):                           # regression
-    _, ax = ev.plot_volcano(df, label_genes=["A", "B"], label_column="gene_name",
-                            return_fig=True)
+    _, ax = ev.plot_volcano(df, label_genes=["A", "B"], label_column="gene_name")
     assert sorted(t.get_text() for t in ax.texts) == ["A", "B"]
 
 
 @pytest.mark.parametrize("container", [pd.Index, pd.Series, np.array])
 def test_plot_label_genes_containers(df, container):
     _, ax = ev.plot_volcano(df, label_genes=container(["A", "B"]),
-                            label_column="gene_name", return_fig=True)
+                            label_column="gene_name")
     assert sorted(t.get_text() for t in ax.texts) == ["A", "B"]
 
 
 def test_labels_default_to_index(df):
-    _, ax = ev.plot_volcano(df, label_genes=["ENS1"], return_fig=True)
+    _, ax = ev.plot_volcano(df, label_genes=["ENS1"])
     assert [t.get_text() for t in ax.texts] == ["ENS1"]
 
 
 def test_label_top_and_label_genes_no_duplicates(df):
     _, ax = ev.plot_volcano(df, label_top=1, label_genes=["B", "F"],
-                            label_column="gene_name", return_fig=True)
+                            label_column="gene_name")
     assert sorted(t.get_text() for t in ax.texts) == ["B", "D", "F"]
 
 
 def test_no_labels_requested(df):
-    _, ax = ev.plot_volcano(df, return_fig=True)
+    _, ax = ev.plot_volcano(df)
     assert len(ax.texts) == 0
 
 
 def test_default_legend(df):
-    _, ax = ev.plot_volcano(df, return_fig=True)
+    _, ax = ev.plot_volcano(df)
     assert [t.get_text() for t in ax.get_legend().get_texts()] == \
         ["Overexpressed", "Underexpressed"]
 
 
 def test_highlight_label_added_to_legend(df):
-    _, ax = ev.plot_volcano(df, return_fig=True,
+    _, ax = ev.plot_volcano(df,
                             highlights=[(["ENS1"], {"color": "red", "label": "mine"})])
     assert "mine" in [t.get_text() for t in ax.get_legend().get_texts()]
 
 
 def test_no_default_has_no_legend(df):
-    _, ax = ev.plot_volcano(df, no_default=True, return_fig=True)
+    _, ax = ev.plot_volcano(df, no_default=True)
     assert ax.get_legend() is None
 
 
+def test_show_legend_off(df):
+    _, ax = ev.plot_volcano(df, show_legend=False,
+                            highlights=[(["ENS1"], {"color": "red", "label": "mine"})])
+    assert ax.get_legend() is None
+
+
+@pytest.mark.parametrize("rasterize", [False, True])
+def test_rasterize(df, rasterize):
+    _, ax = ev.plot_volcano(df, rasterize=rasterize,
+                            highlights=[(["ENS1"], {"color": "red"})])
+    assert [c.get_rasterized() for c in ax.collections] == \
+        [rasterize] * len(ax.collections)
+
+
+def test_rasterize_overrides_highlight(df):
+    _, ax = ev.plot_volcano(df, rasterize=True,
+                            highlights=[(["ENS1"], {"color": "red", "rasterized": False})])
+    assert all(c.get_rasterized() for c in ax.collections)
+
+
+def test_rasterized_per_highlight(df):
+    _, ax = ev.plot_volcano(df, highlights=[(["ENS1"], {"color": "red", "rasterized": True})])
+    flags = [c.get_rasterized() for c in ax.collections]
+    assert True in flags and False in flags
+
+
 def test_threshold_lines(df):
-    _, ax = ev.plot_volcano(df, x_thr=1, y_thr=0.01, return_fig=True)
+    _, ax = ev.plot_volcano(df, x_thr=1, y_thr=0.01)
     h = [l.get_ydata()[0] for l in ax.lines if l.get_ydata()[0] == l.get_ydata()[1]]
     v = [l.get_xdata()[0] for l in ax.lines if l.get_xdata()[0] == l.get_xdata()[1]]
     assert h == [pytest.approx(2)]
@@ -447,12 +476,12 @@ def test_threshold_lines(df):
 
 
 def test_threshold_lines_off(df):
-    _, ax = ev.plot_volcano(df, show_thresholds_line=False, return_fig=True)
+    _, ax = ev.plot_volcano(df, show_thresholds_line=False)
     assert len(ax.lines) == 0
 
 
 def test_title_and_axis_labels(df):
-    _, ax = ev.plot_volcano(df, title="T", xlabel="LFC", ylabel="P", return_fig=True)
+    _, ax = ev.plot_volcano(df, title="T", xlabel="LFC", ylabel="P")
     assert (ax.get_title(), ax.get_xlabel(), ax.get_ylabel()) == ("T", "LFC", "P")
 
 
@@ -466,23 +495,71 @@ def _summary(fig):
 
 def test_summary_counts(df):
     # after dropna: up_sig = ENS1, ENS4; down_sig = ENS2; 4 others
-    fig, _ = ev.plot_volcano(df, return_fig=True)
+    fig, _ = ev.plot_volcano(df)
     assert "up 2; down 1; ns 4" in _summary(fig)
 
 
 def test_summary_with_zero_lfc_threshold(df):
-    fig, _ = ev.plot_volcano(df, x_thr=0, return_fig=True)
+    fig, _ = ev.plot_volcano(df, x_thr=0)
     assert "up" in _summary(fig)
 
 
-def test_summary_goes_on_custom_ax_figure(df):
+def test_summary_goes_on_given_ax_figure(df):
     fig1, ax1 = plt.subplots()
     fig2 = plt.figure()                        # now the "current" figure
-    ev.plot_volcano(df, custom_ax=ax1)
+    ev.plot_volcano(df, ax=ax1)
     assert "up" in _summary(fig1)
     assert _summary(fig2) == ""
 
 
 def test_no_summary_without_thresholds(df):
-    fig, _ = ev.plot_volcano(df, x_thr=None, y_thr=None, return_fig=True)
+    fig, _ = ev.plot_volcano(df, x_thr=None, y_thr=None)
     assert _summary(fig) == ""
+
+
+def test_show_text_summary_off(df):
+    fig, _ = ev.plot_volcano(df, show_text_summary=False)
+    assert _summary(fig) == ""
+
+
+def test_axis_labels_without_summary(df):
+    # turning off the summary should not affect the axis labels
+    _, ax = ev.plot_volcano(df, show_text_summary=False, xlabel="LFC", ylabel="P")
+    assert (ax.get_xlabel(), ax.get_ylabel()) == ("LFC", "P")
+
+
+# --------------------------------------------------------------------------- #
+# label_format
+# --------------------------------------------------------------------------- #
+
+def test_parse_label_format_defaults():
+    assert ev._parse_label_format(None) == ev._LABEL_FORMAT_DEFAULT
+
+
+def test_parse_label_format_partial_keeps_defaults():
+    lf = ev._parse_label_format({"color": "red"})
+    assert lf == {**ev._LABEL_FORMAT_DEFAULT, "color": "red"}
+
+
+def test_parse_label_format_does_not_mutate_default():
+    before = dict(ev._LABEL_FORMAT_DEFAULT)
+    ev._parse_label_format({"fontsize": 20})
+    assert ev._LABEL_FORMAT_DEFAULT == before
+
+
+@pytest.mark.parametrize("key", ["x", "y", "s", "position", "text"])
+def test_parse_label_format_reserved_keys(key):
+    with pytest.raises(ValueError, match=key):
+        ev._parse_label_format({key: None})
+
+
+def test_label_format_applied_to_labels(df):
+    _, ax = ev.plot_volcano(df, label_genes=["ENS1"],
+                            label_format={"fontsize": 14, "color": "red"})
+    t = ax.texts[0]
+    assert (t.get_fontsize(), t.get_color()) == (14, "red")
+
+
+def test_label_format_validated_without_labels(df):
+    with pytest.raises(ValueError):
+        ev.plot_volcano(df, label_format={"x": 1})
