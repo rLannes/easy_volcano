@@ -231,7 +231,29 @@ def _parse_label_format(label_format):
 
     return label_format
 
+## add boxed name 
+"""
+t1 = axs.text(0.4,0.6, 'Hello world line 1', ha='center', color='red', weight='bold', transform=axs.transAxes)
+t2 = axs.text(0.5,0.5, 'Hello world line 2', ha='center', color='green', weight='bold', transform=axs.transAxes)
+t3 = axs.text(0.6,0.4, 'Hello world line 3', ha='center', color='blue', weight='bold', transform=axs.transAxes)
 
+fig.canvas.draw()
+
+textobjs = [t1,t2,t3]
+
+xmin = min([t.get_window_extent().xmin for t in textobjs])
+xmax = max([t.get_window_extent().xmax for t in textobjs])
+ymin = min([t.get_window_extent().ymin for t in textobjs])
+ymax = max([t.get_window_extent().ymax for t in textobjs])
+
+xmin, ymin = fig.transFigure.inverted().transform((xmin, ymin))
+xmax, ymax = fig.transFigure.inverted().transform((xmax, ymax))
+
+rect = patches.Rectangle((xmin,ymin),xmax-xmin,ymax-ymin, facecolor='grey', alpha=0.2, transform=fig.transFigure)
+
+axs.add_patch(rect)
+
+"""
 @_with_rc_param
 def plot_volcano(df,
                  *,
@@ -244,6 +266,7 @@ def plot_volcano(df,
 
                  label_genes = None,
                  label_genes_line = False,
+                 label_min_arrow_len = 100,
                  label_top = None, # take int label the top X gene over and under expressed (so *2 labels)
                  label_column = None, # inseatd of using the index look into this column for label name # label_genes must be from this columns
                  label_format = _LABEL_FORMAT_DEFAULT,
@@ -493,9 +516,14 @@ s
 
     if texts_:
         if label_genes_line:
-            adjustText.adjust_text(texts_, expand=(1.05, 1.2), avoid_self=False,  arrowprops=dict(arrowstyle='-', color='black'))
+            adjustText.adjust_text(texts_, expand=(1.05, 1.2),
+                                   min_arrow_len=label_min_arrow_len,
+                                   avoid_self=False,
+                                   arrowprops=dict(arrowstyle='-', color='black'))
         else:
-            adjustText.adjust_text(texts_, expand=(1.05, 1.2), avoid_self=False)
+            adjustText.adjust_text(texts_, expand=(1.05, 1.2),
+                                   min_arrow_len=label_min_arrow_len,
+                                   avoid_self=False)
     
     if display_grid:
         
