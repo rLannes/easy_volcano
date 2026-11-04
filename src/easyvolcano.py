@@ -281,7 +281,8 @@ def plot_volcano(df,
                 color_down =  "#ABD9E9",
                 color_down_sig = "#2C7BB6",
                 marker = ".",
-                alpha=1,
+                alpha=0.7,
+                
 
                  show_thresholds_line=True,
                  no_default=False,
