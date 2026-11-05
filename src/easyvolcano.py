@@ -134,14 +134,54 @@ def prep_legend(highlights_default, highlights, **scatter_kwargs):
             legend[label] = {"zorder": zorder, **scatter_kwargs, **ov}
     return legend
 
-def get_index_point_to_labels(df, x_thr=1, label_genes=None, label_top=None, label_column=None):
+
+def _extract_label_gene(highlight, seen, res, df, label_column, x, label_format):
+    for (sel, ov) in highlight:
+        label_f = ov.pop("label_gene", None)
+
+        if not label_f:
+            continue
+
+        mask = _resolve(df, sel, label_col=label_column)
+        sub = df[mask]
+
+        sub = sub[~sub.index.isin(seen)]
+        if sub.empty:
+            continue
+        
+        seen.update(sub.index)
+
+        x_ = sub[x]
+        y_ = sub["neglog10"]
+        if label_column is not None:
+            text = list(sub[label_column])
+        else:
+            text = list(sub.index)
+
+        label_f = label_f if isinstance(label_f, dict) else {}
+        label_f = _parse_label_format({**label_format, **label_f})
+
+        #this_label_format = {**label_format, **label_f}
+        res.append((x_, y_, text, label_f))
+    return res
+
+
+def get_index_point_to_labels(df, highlight, label_format, label_genes_format, x, y, x_thr=1,
+                            label_genes=None, label_top=None, label_column=None):
+
+    res = []
+    seen = set() # priority: hilight > set > top
+    # hilight latest will overdraw/erase the previous one if duplicate index
+    _extract_label_gene(highlight[::-1], seen, res, df, label_column, x, label_format)
+
+    for (sel, ov) in highlight:
+        label_f = ov.pop("label_gene", None)
+
 
     index_to_get = []
-    if label_top:
-        x_t = x_thr if x_thr is not None else 0
-        index_to_get.extend(list(df[(df["x"] < -x_t) ].sort_values("y").head(label_top).index))
-        index_to_get.extend(list(df[(df["x"] > x_t) ].sort_values("y").head(label_top).index))
-
+    label_genes_format = label_genes_format if isinstance(label_genes_format, dict) else {}
+    this_label_format = _parse_label_format({**label_format, **label_genes_format})
+    #this_label_format = { , **(label_genes_format or {})}
     if label_genes is not None: 
         if isinstance(label_genes, str):
             label_genes = [label_genes]
@@ -160,7 +200,44 @@ def get_index_point_to_labels(df, x_thr=1, label_genes=None, label_top=None, lab
         else:
             index_to_get.extend(df[df.index.isin(label_genes)].index)
 
-    return index_to_get
+        sub = df[df.index.isin(index_to_get)]
+        sub = sub[~sub.index.isin(seen)]
+        if not sub.empty:
+        
+            seen.update(sub.index)
+
+            x_ = sub[x]
+            y_ = sub["neglog10"]
+            if label_column is not None:
+                text = list(sub[label_column])
+            else:
+                text = list(sub.index)
+
+            res.append((x_, y_, text, this_label_format))
+
+
+    index_to_get = []
+    if label_top:
+        x_t = x_thr if x_thr is not None else 0
+        index_to_get.extend(list(df[(df[x] < -x_t) ].sort_values(y).head(label_top).index))
+        index_to_get.extend(list(df[(df[x] > x_t) ].sort_values(y).head(label_top).index))
+        sub = df[df.index.isin(index_to_get)]
+        
+        sub = sub[~sub.index.isin(seen)]
+        if not sub.empty:
+
+            seen.update(sub.index)
+            x_ = sub[x]
+            y_ = sub["neglog10"]
+            if label_column is not None:
+                text = list(sub[label_column])
+            else:
+                text = list(sub.index)
+            res.append((x_, y_, text, label_format))
+
+
+
+    return res
 
 
 
@@ -181,6 +258,7 @@ def get_highlight_default(y_thr, x_thr, no_default, x, y, color_sig, color_ns, c
 
 
 def get_array_style(df, highlights_default, highlights, style, label_column):
+        
         n = len(df)
         arrays = {k: _full(len(df), v) for k, v in style.items()}
         for (selector, override) in highlights_default:
@@ -219,8 +297,9 @@ CALL_LEVEL = {"marker", "hatch", "zorder", "rasterized"}
 # more exist but I don't think those heve their place : cmap, norm, vmin, vmax, 
 # may be in future: rasterized, hatch no sure hatch can be applied to scatter plot mauy end up using collection patch?
 
-_LABEL_FORMAT_DEFAULT = {"fontsize": 10, "fontstyle": "normal"}
+_LABEL_FORMAT_DEFAULT = {"fontsize": 10, "fontstyle": "normal", "ha": "center", "va": "center"}
 _BLACK_LIST_LABEL_FORMAT = ["x", "y", "s", "position", "text"]
+
 def _parse_label_format(label_format):
 
     label_format = {**_LABEL_FORMAT_DEFAULT, **(label_format or {})}
@@ -265,10 +344,11 @@ def plot_volcano(df,
                  clip_pval = None,
 
                  label_genes = None,
+                 label_genes_format = None, # if set apply to label_genes
                  label_genes_line = False,
                  label_min_arrow_len = 100,
                  label_top = None, # take int label the top X gene over and under expressed (so *2 labels)
-                 label_column = None, # inseatd of using the index look into this column for label name # label_genes must be from this columns
+                 label_column = None, # instead of using the index look into this column for label name # label_genes must be from this columns
                  label_format = _LABEL_FORMAT_DEFAULT,
 
                  display_grid=True, 
@@ -282,7 +362,7 @@ def plot_volcano(df,
                 color_down_sig = "#2C7BB6",
                 marker = ".",
                 alpha=0.7,
-                
+
 
                  show_thresholds_line=True,
                  no_default=False,
@@ -456,9 +536,23 @@ s
     
     highlights_default = get_highlight_default(y_thr, x_thr, no_default, x, y, color_sig, color_ns, color_up, color_down, color_up_sig, color_down_sig)
     legend = prep_legend(highlights_default, highlights, **scatter_kwargs)
+    # prep label (now wotk with  to [(set(label), format_dict)])
+    labels_hold = []
+    
 
     style = {"c": color_base, "zorder": 1, "s": size, "alpha" :alpha, "marker": marker, **scatter_kwargs}
 
+
+    # may tweak this part
+    labels_container = get_index_point_to_labels(df, highlight=highlights,
+                                                  label_format=label_format,
+                                                  label_genes_format=label_genes_format,
+                                                  x_thr=x_thr,
+                                                  x=x, y=y,
+                                              label_genes=label_genes,
+                                                label_top=label_top, 
+                                                label_column=label_column)
+    
     (arrays, drawn_last) =  get_array_style(df, highlights_default, highlights, style, label_column)
     # mpl is annoying those cn only be passed per call not per array
     # use this so modified point are plotted on top.
@@ -492,27 +586,10 @@ s
                    **per_array, **per_call)
 
 
-    # may tweak this part
-    index_to_get = get_index_point_to_labels(df, x_thr=x_thr,
-                                              label_genes=label_genes,
-                                                label_top=label_top, 
-                                                label_column=label_column)
-
-    
     texts_ = []
-    if index_to_get:
-
-        sub = df[df.index.isin(index_to_get)]
-
-        if label_column is not None:
-            text = list(sub[label_column])
-        else:
-            text = list(sub.index)
-        x_axis = x 
-        X = sub[x_axis]
-        Y = sub["neglog10"]
-        for i, v in enumerate(text):
-            texts_.append(ax.text(x=X.iloc[i], y=Y.iloc[i], s=v, ha="center", va="center", **label_format))
+    for (X, Y, text, fmt) in labels_container:
+        for xi, yi, s in zip(X, Y , text):
+            texts_.append(ax.text(x=xi, y=yi, s=s,  **fmt))
 
 
     if texts_:

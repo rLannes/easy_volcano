@@ -259,40 +259,145 @@ def test_rgba_tuple_colour(prepped):
 # which points get a text label
 # --------------------------------------------------------------------------- #
 
+def _labels(prepped, highlight=(), label_format=None, label_genes_format=None, **kw):
+    """Run get_index_point_to_labels and flatten to {row index: (text, format)}."""
+    groups = ev.get_index_point_to_labels(
+        prepped,
+        highlight=[(sel, dict(ov)) for sel, ov in highlight],   # function pops keys
+        label_format=ev._parse_label_format(label_format),
+        label_genes_format=label_genes_format,
+        x=X, y=Y, **kw)
+    return {i: (t, fmt)
+            for (xs, _, text, fmt) in groups
+            for i, t in zip(xs.index, text)}
+
+
 def test_label_top_with_label_column(prepped):                  # regression
-    rows = ev.get_index_point_to_labels(prepped, x_thr=1, label_top=1,
-                                        label_genes=None, label_column="gene_name")
+    rows = _labels(prepped, x_thr=1, label_top=1, label_column="gene_name")
     assert set(rows) == {"ENS2", "ENS4"}
 
 
 def test_label_genes_by_index(prepped):
-    rows = ev.get_index_point_to_labels(prepped, label_genes=["ENS1"])
+    rows = _labels(prepped, label_genes=["ENS1"])
     assert list(rows) == ["ENS1"]
 
 
 def test_label_genes_single_string(prepped):
-    rows = ev.get_index_point_to_labels(prepped, label_genes="A", label_column="gene_name")
+    rows = _labels(prepped, label_genes="A", label_column="gene_name")
     assert list(rows) == ["ENS1"]
 
 
 @pytest.mark.parametrize("container", [list, set, tuple, pd.Index, pd.Series, np.array])
 def test_label_genes_accepts_common_containers(prepped, container):
-    rows = ev.get_index_point_to_labels(prepped, label_genes=container(["A", "B"]),
-                                        label_column="gene_name")
+    rows = _labels(prepped, label_genes=container(["A", "B"]), label_column="gene_name")
     assert sorted(rows) == ["ENS1", "ENS2"]
 
 
 def test_label_genes_missing_warns(prepped, caplog):
     with caplog.at_level(logging.WARNING, logger="easyvolcano"):
-        rows = ev.get_index_point_to_labels(prepped, label_genes=["A", "ZZZ"],
-                                            label_column="gene_name")
+        rows = _labels(prepped, label_genes=["A", "ZZZ"], label_column="gene_name")
     assert list(rows) == ["ENS1"]
     assert "ZZZ" in caplog.text
 
 
 def test_label_top_without_x_thr_does_not_crash(prepped):
-    rows = ev.get_index_point_to_labels(prepped, x_thr=None, label_top=1)
+    rows = _labels(prepped, x_thr=None, label_top=1)
     assert len(rows) == 2
+
+
+def test_label_text_uses_label_column(prepped):
+    rows = _labels(prepped, label_genes=["A"], label_column="gene_name")
+    assert rows["ENS1"][0] == "A"
+
+
+# --------------------------------------------------------------------------- #
+# per-highlight labels (label_gene) and label_genes_format
+# --------------------------------------------------------------------------- #
+
+def test_highlight_label_gene_true_labels_selection(prepped):
+    rows = _labels(prepped, highlight=[(["ENS1", "ENS2"], {"color": "red", "label_gene": True})])
+    assert sorted(rows) == ["ENS1", "ENS2"]
+
+
+def test_highlight_without_label_gene_adds_no_label(prepped):
+    rows = _labels(prepped, highlight=[(["ENS1"], {"color": "red"})])
+    assert rows == {}
+
+
+@pytest.mark.parametrize("falsy", [False, None, {}])
+def test_highlight_label_gene_falsy_adds_no_label(prepped, falsy):
+    rows = _labels(prepped, highlight=[(["ENS1"], {"label_gene": falsy})])
+    assert rows == {}
+
+
+def test_highlight_label_gene_callable_selector(prepped):
+    rows = _labels(prepped, highlight=[(lambda d: d[X] < -2, {"label_gene": True})])
+    assert sorted(rows) == ["ENS2", "ENS8"]
+
+
+def test_highlight_label_gene_true_uses_global_format(prepped):
+    rows = _labels(prepped, label_format={"fontsize": 14},
+                   highlight=[(["ENS1"], {"label_gene": True})])
+    assert rows["ENS1"][1]["fontsize"] == 14
+
+
+def test_highlight_label_gene_dict_merges_on_global_format(prepped):
+    rows = _labels(prepped, label_format={"fontsize": 14},
+                   highlight=[(["ENS1"], {"label_gene": {"fontweight": "bold"}})])
+    fmt = rows["ENS1"][1]
+    assert (fmt["fontsize"], fmt["fontweight"]) == (14, "bold")
+
+
+def test_highlight_label_gene_reserved_key(prepped):
+    with pytest.raises(ValueError, match="'x'"):
+        _labels(prepped, highlight=[(["ENS1"], {"label_gene": {"x": 1}})])
+
+
+def test_label_genes_format_applies_to_label_genes_only(prepped):
+    rows = _labels(prepped, label_format={"fontsize": 14},
+                   label_genes=["ENS1"], label_genes_format={"color": "red"},
+                   label_top=1)
+    assert rows["ENS1"][1]["color"] == "red"
+    assert rows["ENS1"][1]["fontsize"] == 14          # still built on the global format
+    assert "color" not in rows["ENS2"][1]             # ENS2 comes from label_top
+
+
+def test_label_genes_format_reserved_key(prepped):
+    with pytest.raises(ValueError, match="'text'"):
+        _labels(prepped, label_genes=["ENS1"], label_genes_format={"text": "z"})
+
+
+def test_label_priority_highlight_over_label_genes_over_top(prepped):
+    # ENS1 is picked by all three sources, ENS4 by label_genes and label_top
+    rows = _labels(prepped, label_top=1,
+                   label_genes=["ENS1", "ENS4"], label_genes_format={"color": "green"},
+                   highlight=[(["ENS1"], {"label_gene": {"color": "red"}})])
+    assert rows["ENS1"][1]["color"] == "red"
+    assert rows["ENS4"][1]["color"] == "green"
+
+
+def test_label_each_gene_once_across_sources(prepped):
+    groups = ev.get_index_point_to_labels(
+        prepped, highlight=[(["ENS1"], {"label_gene": True})],
+        label_format=ev._parse_label_format(None), label_genes_format=None,
+        x=X, y=Y, label_genes=["ENS1", "ENS2"], label_top=1)
+    labelled = [i for (xs, *_ ) in groups for i in xs.index]
+    assert sorted(labelled) == sorted(set(labelled))
+
+
+def test_later_highlight_label_format_wins(prepped):
+    rows = _labels(prepped, highlight=[(["ENS1"], {"label_gene": {"color": "red"}}),
+                                       (["ENS1"], {"label_gene": {"color": "blue"}})])
+    assert rows["ENS1"][1]["color"] == "blue"
+
+
+def test_label_position_matches_point(prepped):
+    groups = ev.get_index_point_to_labels(
+        prepped, highlight=[], label_format=ev._parse_label_format(None),
+        label_genes_format=None, x=X, y=Y, label_genes=["ENS1"])
+    xs, ys, _, _ = groups[0]
+    assert xs.iloc[0] == prepped.loc["ENS1", X]
+    assert ys.iloc[0] == prepped.loc["ENS1", "neglog10"]
 
 
 # --------------------------------------------------------------------------- #
@@ -563,3 +668,37 @@ def test_label_format_applied_to_labels(df):
 def test_label_format_validated_without_labels(df):
     with pytest.raises(ValueError):
         ev.plot_volcano(df, label_format={"x": 1})
+
+
+def test_plot_highlight_label_gene_draws_formatted_labels(df):
+    _, ax = ev.plot_volcano(df, label_format={"fontsize": 14},
+                            highlights=[(["ENS1"], {"color": "red",
+                                                    "label_gene": {"fontweight": "bold"}})])
+    [t] = ax.texts
+    assert (t.get_text(), t.get_fontsize(), t.get_fontweight()) == ("ENS1", 14, "bold")
+
+
+def test_plot_label_gene_not_passed_to_scatter(df, spy_ax):
+    ax, calls = spy_ax
+    ev.plot_volcano(df, ax=ax, highlights=[(["ENS1"], {"color": "red", "label_gene": True})])
+    assert all("label_gene" not in c for c in calls)
+
+
+def test_plot_label_gene_does_not_mutate_highlights(df):
+    highlights = [(["ENS1"], {"color": "red", "label_gene": {"color": "blue"}})]
+    ev.plot_volcano(df, highlights=highlights)
+    assert highlights == [(["ENS1"], {"color": "red", "label_gene": {"color": "blue"}})]
+
+
+def test_plot_label_genes_format(df):
+    _, ax = ev.plot_volcano(df, label_genes=["ENS1"], label_genes_format={"color": "red"},
+                            label_top=1)
+    colors = {t.get_text(): t.get_color() for t in ax.texts}
+    assert colors["ENS1"] == "red"
+    assert colors["ENS2"] != "red"                  # from label_top, global format
+
+
+def test_plot_label_gene_with_label_column(df):
+    _, ax = ev.plot_volcano(df, label_column="gene_name",
+                            highlights=[(["A", "B"], {"label_gene": True})])
+    assert sorted(t.get_text() for t in ax.texts) == ["A", "B"]
