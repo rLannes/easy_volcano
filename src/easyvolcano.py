@@ -26,7 +26,9 @@ import matplotlib.pyplot as plt
 import math
 from matplotlib.ticker import (MultipleLocator, AutoMinorLocator, MaxNLocator)
 from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 import matplotlib as mpl
+import numbers
 import numpy as np
 import pandas as pd
 import sys
@@ -299,11 +301,18 @@ CALL_LEVEL = {"marker", "hatch", "zorder", "rasterized"}
 
 _LABEL_FORMAT_DEFAULT = {"fontsize": 10, "fontstyle": "normal", "ha": "center", "va": "center"}
 _BLACK_LIST_LABEL_FORMAT = ["x", "y", "s", "position", "text"]
+_LINES_FORMAT_DEFAULT = {"color": "black", "linestyle": "--"}
 
-def _parse_label_format(label_format):
+def _check_lines_param(lines):
+    if not (isinstance(lines, list) or isinstance(lines, dict)):
+        raise ValueError("h_lines parameter must be a list of dict or a dict")
+    
+    lines = lines if isinstance(lines, dict) else [lines]
+    return lines 
+def _parse_label_format(label_format, _BLACK_LIST=_BLACK_LIST_LABEL_FORMAT):
 
     label_format = {**_LABEL_FORMAT_DEFAULT, **(label_format or {})}
-    for e in _BLACK_LIST_LABEL_FORMAT:
+    for e in _BLACK_LIST:
 
         if e in  label_format:
             raise ValueError(f"label_format cannot contain {e!r} as key")
@@ -342,6 +351,7 @@ def plot_volcano(df,
                  x_thr=1, y_thr=0.01, 
                 pval_floor=False,
                  clip_pval = None,
+                 highlights=None, 
 
                  label_genes = None,
                  label_genes_format = None, # if set apply to label_genes
@@ -350,9 +360,8 @@ def plot_volcano(df,
                  label_top = None, # take int label the top X gene over and under expressed (so *2 labels)
                  label_column = None, # instead of using the index look into this column for label name # label_genes must be from this columns
                  label_format = _LABEL_FORMAT_DEFAULT,
-
-                 display_grid=True, 
-                 highlights=None, 
+                 label_avoid_self = False,
+                
                 
                 color_sig = "darkgrey",
                 color_ns = "lightgrey",
@@ -361,10 +370,15 @@ def plot_volcano(df,
                 color_down =  "#ABD9E9",
                 color_down_sig = "#2C7BB6",
                 marker = ".",
-                alpha=0.7,
+                alpha=0.55,
 
 
-                 show_thresholds_line=True,
+                show_thresholds_line = True,
+                line_format_default = _LINES_FORMAT_DEFAULT,
+                h_lines = None, # take dict / list of dict: dict {"y": position, **line_kargs} # (y -> transform to neglog or directly neglog)
+                v_lines = None, # take  dict / list of dict:  {"x": position, **line_kargs}
+
+                 display_grid=True, 
                  no_default=False,
                  xlabel='$Log_{2}$ fold change', ylabel='$-Log_{10}$ adj.P',
                  size=50, color_base="grey",
@@ -373,7 +387,7 @@ def plot_volcano(df,
                  rasterize = False, # if set override any other arg and rasterize all
                  savefig=None, title="",
                  show_legend= True,
-                 legend_bbox=(1.01, 0.5),
+                 legend_bbox=(0.5, 1.01),
                 show_text_summary = True,
                 **scatter_kwargs):
 
@@ -392,6 +406,11 @@ def plot_volcano(df,
              y="padj", x="log2FoldChange",
              highlights=[(["kl-3", "kl-5", "kl-2"], {"color": "red", "size":30}),],
              display_grid=True, display_gene_name=["kl-3", "kl-5", "kl-2"])#
+
+             highlights special keyword: 
+                - boxes_label : boolean (in future may support dict)
+                - label : str -> add str to legend
+                - label_gene : None or dict indicate that those genes must have their label set, the dict can take any text formatting option from mpl. 
 
     Parameters
     ----------
@@ -592,16 +611,17 @@ s
             texts_.append(ax.text(x=xi, y=yi, s=s,  **fmt))
 
 
+    # add boxed_label option
     if texts_:
         if label_genes_line:
-            adjustText.adjust_text(texts_, expand=(1.05, 1.2),
+            adjustText.adjust_text(texts_, expand=(1.1, 1.2),
                                    min_arrow_len=label_min_arrow_len,
-                                   avoid_self=False,
+                                   avoid_self=label_avoid_self,
                                    arrowprops=dict(arrowstyle='-', color='black'))
         else:
-            adjustText.adjust_text(texts_, expand=(1.05, 1.2),
+            adjustText.adjust_text(texts_, expand=(1.1, 1.2),
                                    min_arrow_len=label_min_arrow_len,
-                                   avoid_self=False)
+                                   avoid_self=label_avoid_self)
     
     if display_grid:
         
@@ -613,22 +633,64 @@ s
 
         ax.grid(True, which="minor", linewidth=0.3, alpha=0.3)
 
+    # may refactor line stuff in three small f()
+    line_format_default = {**_LINES_FORMAT_DEFAULT, **line_format_default}
     if show_thresholds_line:
+        line_format_default = line_format_default if isinstance(line_format_default, dict) else {}
+        
+        
         if y_thr is not None:
             h_line = -math.log(y_thr, 10)
-            ax.axhline(h_line, color="black", linestyle="--")
+            ax.axhline(h_line, **line_format_default)
 
         if x_thr is not None:
             v_line = x_thr
-            ax.axvline(v_line, color="black", linestyle="--")
-            ax.axvline(-v_line, color="black", linestyle="--")
+            ax.axvline(v_line, **line_format_default)
+            ax.axvline(-v_line, **line_format_default)
+
+    if h_lines:
+
+        h_lines = _check_lines_param(h_lines)
+        for h_line in h_lines:
+
+            if not isinstance(h_line, dict):
+                raise ValueError("h_lines parameter must be a list of dict or a dict")
+
+            copy_fmt = dict(h_line)
+            y = copy_fmt.pop("y", None)
+            # neglog =  copy_line.pop("neglog", False) not sure about that option; to niche to be usefull
+            if (y is None) or not (isinstance(y, numbers.Real) or (isinstance(y, bool))):
+                raise ValueError("h_lines dict(s) must contain a 'y' key with a numerical value (pvalue, plot position)")
+            if y <= 0:
+                raise ValueError("'y' cannot be equal to zeros or negative, undefined log10")
+            
+            copy_fmt = {**_LINES_FORMAT_DEFAULT, **copy_fmt}
+            ax.axhline(-math.log10(y), **copy_fmt)
+
+    if v_lines:
+
+        v_lines = _check_lines_param(v_lines)
+        for v_line in v_lines:
+
+            if not isinstance(v_line, dict):
+                raise ValueError("v_lines parameter must be a list of dict or a dict")
+            
+            copy_fmt = dict(v_line)
+            x = copy_fmt.pop("x", None)
+
+            if (x is None) or not (isinstance(x, numbers.Real) or (isinstance(x, bool))):
+                raise ValueError("v_lines dict(s) must contain a 'x' key with a numerical value (pvalue, plot position)")
+            
+            copy_fmt = {**_LINES_FORMAT_DEFAULT, **copy_fmt}
+            ax.axvline(x, **copy_fmt)
+
             
     ax.tick_params(axis='y', labelsize=20)
     ax.tick_params(axis='x', labelsize=20)
     ax.margins(x=0.02, tight=True)
     ax.margins(y=0.02, tight=True)  
     
-    ax.set_title(title, fontsize=28)
+    ax.set_title(title, fontsize=28, pad=25)
     ax.spines[['right', 'top']].set_visible(False)
 
     if show_text_summary:
@@ -656,7 +718,7 @@ s
             legend_elements.append(Line2D([0], [0],  marker=m,
                                         markerfacecolor=c, color='w', label=k, markersize=18))
         if legend_elements:
-            ax.legend(handles=legend_elements, bbox_to_anchor=legend_bbox, loc='center left')
+            ax.legend(handles=legend_elements, bbox_to_anchor=legend_bbox, loc="lower center")
 
     plt.tight_layout()
     if savefig:
