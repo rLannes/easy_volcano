@@ -365,7 +365,7 @@ def plot_volcano(df,
                  rasterize = False, # if set override any other arg and rasterize all
                  savefig=None, title="",
                  show_legend= True,
-                 legend_bbox=(0.5, 1.01),
+                 legend_bbox=(0.5, 1.00),
                  legend_loc = "lower center",
                  legend_ncols = 2,
                  legend_fancybox=True,
@@ -677,8 +677,8 @@ s
     ax.tick_params(axis='x', labelsize=20)
     ax.margins(x=0.02, tight=True)
     ax.margins(y=0.02, tight=True)  
-    
-    ax.set_title(title, fontsize=28, pad=25)
+    if title:
+        ax.set_title(title, fontsize=28, pad=30)
     ax.spines[['right', 'top']].set_visible(False)
 
     if show_text_summary:
