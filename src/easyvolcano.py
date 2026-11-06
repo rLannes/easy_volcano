@@ -363,7 +363,10 @@ def plot_volcano(df,
                  width=8, height=4.8,
                  ax = None,
                  rasterize = False, # if set override any other arg and rasterize all
-                 savefig=None, title="",
+                 savefig=None,
+                title="",
+                title_pad=30,
+                title_fontsize=28,
                  show_legend= True,
                  legend_bbox=(0.5, 1.00),
                  legend_loc = "lower center",
@@ -587,14 +590,14 @@ s
 
 
     texts_ = []
-    """label_box_container = []
+    label_box_container = []
     for (X, Y, text, fmt) in labels_container:
         for xi, yi, s in zip(X, Y , text):
             box = fmt.pop("boxes_label", None)
             t = ax.text(x=xi, y=yi, s=s,  **fmt)
-            if box is not None:
-                label_box_container.append()
-            texts_.append(t)""" 
+            #if box is not None:
+            #    label_box_container.append()
+            texts_.append(t)
 
 
     # add boxed_label option
@@ -678,7 +681,7 @@ s
     ax.margins(x=0.02, tight=True)
     ax.margins(y=0.02, tight=True)  
     if title:
-        ax.set_title(title, fontsize=28, pad=30)
+        ax.set_title(title, fontsize=title_fontsize, pad=title_pad)
     ax.spines[['right', 'top']].set_visible(False)
 
     if show_text_summary:
