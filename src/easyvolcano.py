@@ -690,7 +690,7 @@ s
             ns = df.shape[0] - (up + down)
             txt = "\n\nup {}; down {}; ns {}".format(up, down, ns )
         if txt:
-            ax.figure.text(0.5, -0.05, txt, wrap=True, horizontalalignment='center', fontsize=16)
+            ax.figure.text(0.5, -0.55, txt, wrap=True, horizontalalignment='center', fontsize=16)
     
     ax.set_ylabel(ylabel, fontsize=24)
     ax.set_xlabel(xlabel , fontsize=24)
@@ -711,7 +711,7 @@ s
             ax.legend(handles=legend_elements, bbox_to_anchor=legend_bbox, fancybox=legend_fancybox,
                        loc=legend_loc, ncols=legend_ncols)
 
-    #plt.tight_layout()
+    plt.tight_layout()
     if savefig:
         fig.savefig(savefig, bbox_inches="tight")
 
