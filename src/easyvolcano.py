@@ -365,8 +365,8 @@ def plot_volcano(df,
                  rasterize = False, # if set override any other arg and rasterize all
                  savefig=None, title="",
                  show_legend= True,
-                 legend_bbox=(0.5, -0.05),
-                 legend_loc = "upper center",
+                 legend_bbox=(0.5, 1.01),
+                 legend_loc = "lower center",
                  legend_ncols = 2,
                  legend_fancybox=True,
                 show_text_summary = True,
@@ -690,7 +690,7 @@ s
             ns = df.shape[0] - (up + down)
             txt = "\n\nup {}; down {}; ns {}".format(up, down, ns )
         if txt:
-            ax.figure.text(0.5, -0.55, txt, wrap=True, horizontalalignment='center', fontsize=16)
+            ax.figure.text(0.5, -0.05, txt, wrap=True, horizontalalignment='center', fontsize=16)
     
     ax.set_ylabel(ylabel, fontsize=24)
     ax.set_xlabel(xlabel , fontsize=24)
