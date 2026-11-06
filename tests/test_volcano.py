@@ -456,7 +456,7 @@ def test_custom_column_names(df):
 
 def test_duplicate_index(df):
     df.index = ["g1", "g1", "g2", "g3", "g4", "g5", "g6", "g6"]
-    _, ax = ev.plot_volcano(df, label_genes=["g1"])
+    _, ax = ev.plot_volcano(df, label_genes=["g1"], label_top=None)
     assert [t.get_text() for t in ax.texts] == ["g1", "g1"]
 
 
@@ -502,19 +502,20 @@ def test_marker_kwarg_applies_to_all_points(df, spy_ax):
 
 
 def test_labels_use_label_column(df):                           # regression
-    _, ax = ev.plot_volcano(df, label_genes=["A", "B"], label_column="gene_name")
+    _, ax = ev.plot_volcano(df, label_genes=["A", "B"], label_column="gene_name",
+                            label_top=None)
     assert sorted(t.get_text() for t in ax.texts) == ["A", "B"]
 
 
 @pytest.mark.parametrize("container", [pd.Index, pd.Series, np.array])
 def test_plot_label_genes_containers(df, container):
     _, ax = ev.plot_volcano(df, label_genes=container(["A", "B"]),
-                            label_column="gene_name")
+                            label_column="gene_name", label_top=None)
     assert sorted(t.get_text() for t in ax.texts) == ["A", "B"]
 
 
 def test_labels_default_to_index(df):
-    _, ax = ev.plot_volcano(df, label_genes=["ENS1"])
+    _, ax = ev.plot_volcano(df, label_genes=["ENS1"], label_top=None)
     assert [t.get_text() for t in ax.texts] == ["ENS1"]
 
 
@@ -525,7 +526,7 @@ def test_label_top_and_label_genes_no_duplicates(df):
 
 
 def test_no_labels_requested(df):
-    _, ax = ev.plot_volcano(df)
+    _, ax = ev.plot_volcano(df, label_top=None)
     assert len(ax.texts) == 0
 
 
@@ -671,7 +672,7 @@ def test_label_format_validated_without_labels(df):
 
 
 def test_plot_highlight_label_gene_draws_formatted_labels(df):
-    _, ax = ev.plot_volcano(df, label_format={"fontsize": 14},
+    _, ax = ev.plot_volcano(df, label_format={"fontsize": 14}, label_top=None,
                             highlights=[(["ENS1"], {"color": "red",
                                                     "label_gene": {"fontweight": "bold"}})])
     [t] = ax.texts
@@ -699,6 +700,6 @@ def test_plot_label_genes_format(df):
 
 
 def test_plot_label_gene_with_label_column(df):
-    _, ax = ev.plot_volcano(df, label_column="gene_name",
+    _, ax = ev.plot_volcano(df, label_column="gene_name", label_top=None,
                             highlights=[(["A", "B"], {"label_gene": True})])
     assert sorted(t.get_text() for t in ax.texts) == ["A", "B"]
