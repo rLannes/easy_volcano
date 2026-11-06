@@ -365,8 +365,8 @@ def plot_volcano(df,
                  rasterize = False, # if set override any other arg and rasterize all
                  savefig=None, title="",
                  show_legend= True,
-                 legend_bbox=(0.5, -0.01),
-                 legend_loc = "lower center",
+                 legend_bbox=(0.5, -0.05),
+                 legend_loc = "upper center",
                  legend_ncols = 2,
                 show_text_summary = True,
                 **scatter_kwargs):
