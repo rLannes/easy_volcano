@@ -366,7 +366,7 @@ def plot_volcano(df,
                  savefig=None, title="",
                  show_legend= True,
                  legend_bbox=(0.5, -0.05),
-                 legend_loc = "outside upper center",
+                 legend_loc = "upper center",
                  legend_ncols = 2,
                  legend_fancybox=True,
                 show_text_summary = True,
@@ -696,8 +696,8 @@ s
     ax.set_xlabel(xlabel , fontsize=24)
 
         ##
-    # bb = ax.get_tightbbox(fig.canvas.get_renderer())    # axes + ticks + xlabel
-    # y_bottom = ax.transAxes.inverted().transform((0, bb.y0))[1]
+    bb = ax.get_tightbbox(fig.canvas.get_renderer())    # axes + ticks + xlabel
+    y_bottom = ax.transAxes.inverted().transform((0, bb.y0))[1]
     if show_legend:
         legend_elements = []
         for k, v in legend.items():
