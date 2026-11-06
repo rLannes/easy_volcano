@@ -375,7 +375,7 @@ def plot_volcano(df,
                 # "legend_loc" : "lower center",
                 # "legend_ncols": 2}}
                 legend_bbox=(1.0, 0.50),
-                legend_loc = "upper center",
+                legend_loc = "center left",
                 legend_ncols = 1,
                 legend_fancybox=True,
 
