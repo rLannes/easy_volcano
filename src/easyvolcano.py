@@ -350,28 +350,31 @@ def plot_volcano(df,
                 marker = ".",
                 alpha=0.55,
 
-
                 show_thresholds_line = True,
                 line_format_default = _LINES_FORMAT_DEFAULT,
                 h_lines = None, # take dict / list of dict: dict {"y": position, **line_kargs} # (y -> transform to neglog or directly neglog)
                 v_lines = None, # take  dict / list of dict:  {"x": position, **line_kargs}
 
-                 display_grid=True, 
-                 no_default=False,
-                 xlabel='$Log_{2}$ fold change', ylabel='$-Log_{10}$ adj.P',
-                 size=50, color_base="grey",
-                 width=8, height=4.8,
-                 ax = None,
-                 rasterize = False, # if set override any other arg and rasterize all
-                 savefig=None,
+                display_grid=True, 
+                no_default=False,
+                xlabel='$Log_{2}$ fold change', ylabel='$-Log_{10}$ adj.P',
+                size=50, color_base="grey",
+                width=8, height=4.8,
+                ax = None,
+                rasterize = False, # if set override any other arg and rasterize all
+                savefig=None,
+
                 title="",
                 title_pad=30,
                 title_fontsize=28,
-                 show_legend= True,
-                 legend_bbox=(0.5, 1.00),
-                 legend_loc = "lower center",
-                 legend_ncols = 2,
-                 legend_fancybox=True,
+
+                show_legend= True,
+
+                legend_bbox=(1.0, 0.50),
+                legend_loc = "right center",
+                legend_ncols = 2,
+                legend_fancybox=True,
+
                 show_text_summary = True,
                 **scatter_kwargs):
 
@@ -543,18 +546,19 @@ s
     labels_hold = []
     
 
-    style = {"c": color_base, "zorder": 1, "s": size, "alpha" :alpha, "marker": marker, **scatter_kwargs}
+    style = {"c": color_base, "zorder": 1, "s": size,
+              "alpha" :alpha, "marker": marker, **scatter_kwargs}
 
 
     # may tweak this part
     labels_container = get_index_point_to_labels(df, highlight=highlights,
-                                                  label_format=label_format,
-                                                  label_genes_format=label_genes_format,
-                                                  x_thr=x_thr,
-                                                  x=x, y=y,
-                                              label_genes=label_genes,
-                                                label_top=label_top, 
-                                                label_column=label_column)
+                                                    label_format=label_format,
+                                                    label_genes_format=label_genes_format,
+                                                    x_thr=x_thr,
+                                                    x=x, y=y,
+                                                    label_genes=label_genes,
+                                                    label_top=label_top, 
+                                                    label_column=label_column)
     
     (arrays, drawn_last) =  get_array_style(df, highlights_default, highlights, style, label_column)
     # mpl is annoying those cn only be passed per call not per array
