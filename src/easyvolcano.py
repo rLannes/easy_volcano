@@ -335,7 +335,7 @@ def plot_volcano(df,
                  label_genes_format = None, # if set apply to label_genes
                  label_genes_line = False,
                  label_min_arrow_len = 100,
-                 label_top = None, # take int label the top X gene over and under expressed (so *2 labels)
+                 label_top = 5, # take int label the top X gene over and under expressed (so *2 labels)
                  label_column = None, # instead of using the index look into this column for label name # label_genes must be from this columns
                  label_format = _LABEL_FORMAT_DEFAULT,
                  label_avoid_self = False,
@@ -368,10 +368,14 @@ def plot_volcano(df,
                 title_pad=30,
                 title_fontsize=28,
 
-                show_legend= True,
-
+                show_legend=True,
+                # legend_default = {"right": {"legend_bbox": (1.0, 0.50),
+                # "legend_loc" : "center left",
+                # "legend_ncols": 1}, "top": {"legend_bbox": (0.50, 1.00),
+                # "legend_loc" : "lower center",
+                # "legend_ncols": 2}}
                 legend_bbox=(1.0, 0.50),
-                legend_loc = "right center",
+                legend_loc = "upper center",
                 legend_ncols = 2,
                 legend_fancybox=True,
 
