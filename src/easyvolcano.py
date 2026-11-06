@@ -25,6 +25,7 @@ matplotlib is configured for editable text in vector output
 import matplotlib.pyplot as plt
 import math
 from matplotlib.ticker import (MultipleLocator, AutoMinorLocator, MaxNLocator)
+from matplotlib.collections import PatchCollection
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 import matplotlib as mpl
@@ -319,29 +320,6 @@ def _parse_label_format(label_format, _BLACK_LIST=_BLACK_LIST_LABEL_FORMAT):
 
     return label_format
 
-## add boxed name 
-"""
-t1 = axs.text(0.4,0.6, 'Hello world line 1', ha='center', color='red', weight='bold', transform=axs.transAxes)
-t2 = axs.text(0.5,0.5, 'Hello world line 2', ha='center', color='green', weight='bold', transform=axs.transAxes)
-t3 = axs.text(0.6,0.4, 'Hello world line 3', ha='center', color='blue', weight='bold', transform=axs.transAxes)
-
-fig.canvas.draw()
-
-textobjs = [t1,t2,t3]
-
-xmin = min([t.get_window_extent().xmin for t in textobjs])
-xmax = max([t.get_window_extent().xmax for t in textobjs])
-ymin = min([t.get_window_extent().ymin for t in textobjs])
-ymax = max([t.get_window_extent().ymax for t in textobjs])
-
-xmin, ymin = fig.transFigure.inverted().transform((xmin, ymin))
-xmax, ymax = fig.transFigure.inverted().transform((xmax, ymax))
-
-rect = patches.Rectangle((xmin,ymin),xmax-xmin,ymax-ymin, facecolor='grey', alpha=0.2, transform=fig.transFigure)
-
-axs.add_patch(rect)
-
-"""
 @_with_rc_param
 def plot_volcano(df,
                  *,
@@ -387,7 +365,9 @@ def plot_volcano(df,
                  rasterize = False, # if set override any other arg and rasterize all
                  savefig=None, title="",
                  show_legend= True,
-                 legend_bbox=(0.5, 1.01),
+                 legend_bbox=(0.5, -0.01),
+                 legend_loc = "lower center",
+                 legend_ncols = 2,
                 show_text_summary = True,
                 **scatter_kwargs):
 
@@ -606,9 +586,14 @@ s
 
 
     texts_ = []
+    """label_box_container = []
     for (X, Y, text, fmt) in labels_container:
         for xi, yi, s in zip(X, Y , text):
-            texts_.append(ax.text(x=xi, y=yi, s=s,  **fmt))
+            box = fmt.pop("boxes_label", None)
+            t = ax.text(x=xi, y=yi, s=s,  **fmt)
+            if box is not None:
+                label_box_container.append()
+            texts_.append(t)""" 
 
 
     # add boxed_label option
@@ -622,6 +607,8 @@ s
             adjustText.adjust_text(texts_, expand=(1.1, 1.2),
                                    min_arrow_len=label_min_arrow_len,
                                    avoid_self=label_avoid_self)
+
+            #boxes_label
     
     if display_grid:
         
@@ -718,7 +705,7 @@ s
             legend_elements.append(Line2D([0], [0],  marker=m,
                                         markerfacecolor=c, color='w', label=k, markersize=18))
         if legend_elements:
-            ax.legend(handles=legend_elements, bbox_to_anchor=legend_bbox, loc="lower center")
+            ax.legend(handles=legend_elements, bbox_to_anchor=legend_bbox, loc=legend_loc, ncols=legend_ncols)
 
     plt.tight_layout()
     if savefig:
@@ -729,3 +716,29 @@ s
 
 
 
+
+
+
+## add boxed name 
+"""
+t1 = axs.text(0.4,0.6, 'Hello world line 1', ha='center', color='red', weight='bold', transform=axs.transAxes)
+t2 = axs.text(0.5,0.5, 'Hello world line 2', ha='center', color='green', weight='bold', transform=axs.transAxes)
+t3 = axs.text(0.6,0.4, 'Hello world line 3', ha='center', color='blue', weight='bold', transform=axs.transAxes)
+
+fig.canvas.draw()
+
+textobjs = [t1,t2,t3]
+
+xmin = min([t.get_window_extent().xmin for t in textobjs])
+xmax = max([t.get_window_extent().xmax for t in textobjs])
+ymin = min([t.get_window_extent().ymin for t in textobjs])
+ymax = max([t.get_window_extent().ymax for t in textobjs])
+
+xmin, ymin = fig.transFigure.inverted().transform((xmin, ymin))
+xmax, ymax = fig.transFigure.inverted().transform((xmax, ymax))
+
+rect = patches.Rectangle((xmin,ymin),xmax-xmin,ymax-ymin, facecolor='grey', alpha=0.2, transform=fig.transFigure)
+
+axs.add_patch(rect)
+
+"""
