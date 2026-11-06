@@ -366,8 +366,9 @@ def plot_volcano(df,
                  savefig=None, title="",
                  show_legend= True,
                  legend_bbox=(0.5, -0.05),
-                 legend_loc = "upper center",
+                 legend_loc = "outside upper center",
                  legend_ncols = 2,
+                 legend_fancybox=True,
                 show_text_summary = True,
                 **scatter_kwargs):
 
@@ -694,7 +695,9 @@ s
     ax.set_ylabel(ylabel, fontsize=24)
     ax.set_xlabel(xlabel , fontsize=24)
 
-    ##
+        ##
+    # bb = ax.get_tightbbox(fig.canvas.get_renderer())    # axes + ticks + xlabel
+    # y_bottom = ax.transAxes.inverted().transform((0, bb.y0))[1]
     if show_legend:
         legend_elements = []
         for k, v in legend.items():
@@ -705,9 +708,10 @@ s
             legend_elements.append(Line2D([0], [0],  marker=m,
                                         markerfacecolor=c, color='w', label=k, markersize=18))
         if legend_elements:
-            ax.legend(handles=legend_elements, bbox_to_anchor=legend_bbox, loc=legend_loc, ncols=legend_ncols)
+            ax.legend(handles=legend_elements, bbox_to_anchor=legend_bbox, fancybox=legend_fancybox,
+                       loc=legend_loc, ncols=legend_ncols)
 
-    plt.tight_layout()
+    #plt.tight_layout()
     if savefig:
         fig.savefig(savefig, bbox_inches="tight")
 
