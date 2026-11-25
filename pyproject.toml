@@ -8,10 +8,11 @@ dynamic = ["version"]          # taken from the git tag (vX.Y.Z) by hatch-vcs
 description = "Volcano plots for gene differential-expression results."
 readme = "README.md"
 requires-python = ">=3.10"
-license = "MIT"                # TODO: confirm and add a LICENSE file
-authors = [{ name = "Romain Lannes", email = "rlannes@wi.mit.edu" }]  # TODO: confirm
+license = "MIT"              
+authors = [{ name = "Romain Lannes", email = "romain.lannes@protonmail.com" }]  
 keywords = ["volcano plot", "differential expression", "DESeq2", "bioinformatics", "matplotlib"]
 classifiers = [
+    "Development Status :: 4 - Beta",
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
     "Intended Audience :: Science/Research",

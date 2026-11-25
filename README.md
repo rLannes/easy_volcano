@@ -4,18 +4,21 @@ Fully customisable, publication-ready volcano plots in one line of Python.
 
 Romain JSB Lannes, PhD
 
-![Volcano plot of the airway dataset with glucocorticoid targets and collagens highlighted](data/figures/hero.png)
-
 Volcano plots are used in almost every RNA-seq analysis, yet in Python there are few alternatives to writing
 custom plotting code each time. easy_volcano draws a clean volcano plot in one line, and lets you customise
 every part of it when you need to: colours, labels, legend, extra lines, and any matplotlib option.
 
+Example figure: 
+![Volcano plot of the airway dataset with glucocorticoid targets and collagens highlighted](data/figures/hero.png)
+
+
+
 ## Installation
 
-easy_volcano is not on PyPI yet. Install the latest version from GitHub:
+easy_volcano is  on PyPI.
 
 ```bash
-pip install git+https://github.com/rLannes/easy_volcano.git
+pip install easy_volcano
 ```
 
 ## Quick start
