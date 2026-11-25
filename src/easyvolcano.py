@@ -24,11 +24,12 @@ matplotlib is configured for editable text in vector output
 
 import matplotlib.pyplot as plt
 import math
+import matplotlib as mpl
 from matplotlib.ticker import (MultipleLocator, AutoMinorLocator, MaxNLocator)
 from matplotlib.collections import PatchCollection
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
-import matplotlib as mpl
+from matplotlib.transforms import offset_copy
 import numbers
 import numpy as np
 import pandas as pd
@@ -320,6 +321,26 @@ def _parse_label_format(label_format, _BLACK_LIST=_BLACK_LIST_LABEL_FORMAT):
 
     return label_format
 
+_LEGEND_PRESETS = {
+    "right":  {"bbox_to_anchor": (1.0, 0.5), "loc": "center left",  "ncols": 1, "borderaxespad": 0},
+    "top":    {"bbox_to_anchor": (0.5, 1.0), "loc": "lower center", "borderaxespad": 0},
+    "bottom": {"bbox_to_anchor": (0.5, 0.0), "loc": "upper center", "borderaxespad": 0},
+}
+
+# 72 points to inches
+def _px_to_pt(fig, px):
+    return px * 72 / fig.dpi
+
+# used for legend placement such a pain
+def _gap_above(ax, renderer):
+    """Points between the axes top and the top of everything drawn so far."""
+    bb = ax.get_tightbbox(renderer)
+    return _px_to_pt(ax.figure, bb.y1 - ax.bbox.y1)
+
+def _gap_below(ax, renderer):
+    bb = ax.get_tightbbox(renderer)
+    return _px_to_pt(ax.figure, ax.bbox.y0 - bb.y0)
+
 @_with_rc_param
 def plot_volcano(df,
                  *,
@@ -365,21 +386,23 @@ def plot_volcano(df,
                 savefig=None,
 
                 title="",
-                title_pad=30,
+                title_pad=15,
                 title_fontsize=28,
+                subtitle="",
+                subtitle_pad=15,
+                subtitle_fontsize=18,
+
 
                 show_legend=True,
-                # legend_default = {"right": {"legend_bbox": (1.0, 0.50),
-                # "legend_loc" : "center left",
-                # "legend_ncols": 1}, "top": {"legend_bbox": (0.50, 1.00),
-                # "legend_loc" : "lower center",
-                # "legend_ncols": 2}}
-                legend_bbox=(1.0, 0.50),
-                legend_loc = "center left",
-                legend_ncols = 1,
+                legend_loc="bottom",
+                legend_kwargs = None,
+                legend_nrows = None, # default
                 legend_fancybox=True,
+                padding_legend=15,
 
                 show_text_summary = True,
+                font_size_text_summary=16,
+                padding_text_summary = 15,
                 **scatter_kwargs):
 
 
@@ -507,8 +530,56 @@ s
         Base point colour, used before any override. if no default and no highlight all the point will be this color.
     savefig : str or path, optional
         If given, save the figure to this path with bbox_inches="tight".
-    title : str, default "Title"
-        Plot title.
+    ----------
+    ## title, legend and summary layout
+        Elements around the plot are stacked automatically so they never
+        overlap. Above the plot, from the axes up: legend (if
+        legend_loc="top"), subtitle, title. Below the plot, from the x-label
+        down: legend (if legend_loc="bottom"), text summary.
+        All paddings are gaps in points between an element and the one
+        before it in the stack, so they do not depend on figure size.
+
+    title : str, default ""
+        Plot title. Not drawn if empty.
+    title_pad : float, default 15
+        Gap (points) between the title and the element below it
+        (subtitle, top legend, or the plot).
+    title_fontsize : float, default 28
+    subtitle : str, default ""
+        Text drawn between the title and the plot. Not drawn if empty.
+    subtitle_pad : float, default 15
+        Gap (points) between the subtitle and the element below it
+        (top legend or the plot).
+    subtitle_fontsize : float, default 18
+
+    show_legend : bool, default True
+        Draw the legend. Same as legend_loc=None when False.
+    legend_loc : {"bottom", "top", "right"} or None, default "bottom"
+        Legend position preset. None draws no legend.
+        Entries come from the default categories ("Overexpressed",
+        "Underexpressed") and from any highlight with a "label" key.
+        If there are no entries, no legend is drawn.
+    legend_nrows : int or None, default None
+        Number of legend rows. None means one row for "top"/"bottom" and
+        one column for "right". An explicit "ncols" in legend_kwargs wins.
+    legend_kwargs : dict or None, default None
+        Extra keyword arguments passed to matplotlib's ax.legend, merged on
+        top of the preset (e.g. {"fontsize": 12, "frameon": False}).
+        Use matplotlib names (bbox_to_anchor, loc, ncols, ...).
+    padding_legend : float, default 15
+        Gap (points) between the legend and the plot (top) or the x-label
+        (bottom). Currently not applied to legend_loc="right".
+    legend_fancybox : bool, default True
+        Currently unused; pass {"fancybox": ...} in legend_kwargs instead.
+
+    show_text_summary : bool, default True
+        Write "up N; down N; ns N" under the plot (needs x_thr and y_thr).
+    font_size_text_summary : float, default 16
+    padding_text_summary : float, default 15
+        Gap (points) between the summary and the element above it
+        (bottom legend or the x-label).
+    ----------
+
     return_fig : bool, default False
         return (fig, ax)
     xlabel: str default '$Log_{2}$ fold change',
@@ -688,39 +759,120 @@ s
     ax.tick_params(axis='x', labelsize=20)
     ax.margins(x=0.02, tight=True)
     ax.margins(y=0.02, tight=True)  
-    if title:
-        ax.set_title(title, fontsize=title_fontsize, pad=title_pad)
+
     ax.spines[['right', 'top']].set_visible(False)
 
-    if show_text_summary:
-    # plot a quick summary of the data
-        txt = ''
-        if x_thr is not None and y_thr is not None:
-            up = df[(df[y] <= y_thr) & (df[x] >= x_thr)].shape[0]
-            down =  df[(df[y] <= y_thr) & (df[x] <= -x_thr)].shape[0]
-            ns = df.shape[0] - (up + down)
-            txt = "\n\nup {}; down {}; ns {}".format(up, down, ns )
-        if txt:
-            ax.figure.text(0.5, -0.05, txt, wrap=True, horizontalalignment='center', fontsize=16)
-    
+
     ax.set_ylabel(ylabel, fontsize=24)
     ax.set_xlabel(xlabel , fontsize=24)
 
-        ##
-    bb = ax.get_tightbbox(fig.canvas.get_renderer())    # axes + ticks + xlabel
-    y_bottom = ax.transAxes.inverted().transform((0, bb.y0))[1]
-    if show_legend:
+
+    # I use a tight box approach to place the titel and extar text + legend
+    # small performance hit but should be the cleaner
+    legend_elements = None
+    legend_args = None
+    # make legend handle:
+    if show_legend and legend_loc is not None:
+        if legend_loc not in _LEGEND_PRESETS:
+            raise ValueError(f"legend must be one of {list(_LEGEND_PRESETS)} or None, got {legend_loc!r}")
+        legend_args = {**_LEGEND_PRESETS[legend_loc], **(legend_kwargs or {})}
+
         legend_elements = []
         for k, v in legend.items():
             c = v.get("c")
             if not c: 
                 c = v.get("color")
             m = v.get("marker", ".")
-            legend_elements.append(Line2D([0], [0],  marker=m,
+            a = v.get("alpha", alpha)
+            legend_elements.append(Line2D([0], [0],  marker=m, #alpha = a,
                                         markerfacecolor=c, color='w', label=k, markersize=18))
+
+        n = len(legend_elements)
+        if legend_nrows is not None:
+            if not isinstance(legend_nrows, int) or legend_nrows < 1:
+                raise ValueError(f"legend_nrows must be a positive int or None, got {legend_nrows!r}")
+            ncols = math.ceil(n / legend_nrows)
+        elif legend_loc in ("top", "bottom"):
+            ncols = n            # one row
+        else:
+            ncols = 1            # one column (right)
+        legend_args.setdefault("ncols", ncols)
+
+
+    renderer = fig.canvas.get_renderer()
+
+    if legend_loc == "bottom" and show_legend:
+        
+        bottom = offset_copy(ax.transAxes,
+                              fig=fig,
+                               y=-(_gap_below(ax, renderer) + padding_legend),
+                              units="points")
         if legend_elements:
-            ax.legend(handles=legend_elements, bbox_to_anchor=legend_bbox, fancybox=legend_fancybox,
-                       loc=legend_loc, ncols=legend_ncols)
+            ax.legend(handles=legend_elements, bbox_transform=bottom, **legend_args)
+
+
+    if show_text_summary:
+        bottom = offset_copy(ax.transAxes,
+                              fig=fig,
+                               y=-(_gap_below(ax, renderer) + padding_text_summary),
+                              units="points")
+
+    # plot a quick summary of the data
+        txt = ''
+        if x_thr is not None and y_thr is not None:
+            up = df[(df[y] <= y_thr) & (df[x] >= x_thr)].shape[0]
+            down =  df[(df[y] <= y_thr) & (df[x] <= -x_thr)].shape[0]
+            ns = df.shape[0] - (up + down)
+            txt = "up {}; down {}; ns {}".format(up, down, ns )
+        if txt:
+            ax.figure.text(0.5, 0, txt, wrap=True,
+                            va="top",
+                            horizontalalignment='center',
+                            fontsize=font_size_text_summary,
+                            transform=bottom)
+
+            
+
+    #borderaxespad=0
+
+    # add legend, subtitle, title
+    if legend_loc == "top" and show_legend:
+        up = offset_copy(ax.transAxes, fig=fig,
+                        y=_gap_above(ax, renderer) + padding_legend,
+                            units="points")
+        if legend_elements:
+            ax.legend(handles=legend_elements,
+                   bbox_transform=up,
+                   #borderaxespad=0,
+                   **legend_args)
+
+
+    if subtitle:
+        up = offset_copy(ax.transAxes, fig=fig,
+                                y=_gap_above(ax, renderer) + subtitle_pad,
+                                    units="points")
+        ax.text(0.5, 1.0, subtitle, transform=up, ha="center",
+                 va="bottom", fontsize=subtitle_fontsize)
+
+
+    if title:
+        ax.set_title(title, fontsize=title_fontsize,
+                      pad=_gap_above(ax, renderer) + title_pad)
+
+    if legend_loc == "right" and show_legend:
+        if legend_elements:
+            ax.legend(handles=legend_elements,
+                           **legend_args)
+        
+    #bb = ax.get_tightbbox(fig.canvas.get_renderer())    # axes + ticks + xlabel
+    #y_bottom = ax.transAxes.inverted().transform((0, bb.y0))[1]
+
+    #    if legend_elements:
+    #        ax.legend(handles=legend_elements, bbox_to_anchor=legend_bbox, fancybox=legend_fancybox,
+    #                   loc=legend_loc, ncols=legend_ncols)
+    
+    #if title:
+    #    ax.set_title(title, fontsize=title_fontsize, pad=title_pad)
 
     plt.tight_layout()
     if savefig:
