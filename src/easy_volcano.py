@@ -40,8 +40,6 @@ import functools
 import logging
 logger = logging.getLogger(__name__)
 
-mpl.rcParams["font.stretch"] = "expanded"
-plt.rcParams['pdf.fonttype'] = 42
 
 _MPL_STYLE = { "font.stretch" : "expanded", 'pdf.fonttype':  42 }
 # decorator 
@@ -408,194 +406,225 @@ def plot_volcano(df,
 
     """Draw a volcano plot from a differential-expression results table.
 
-    Reads a tab-separated results file, computes -log10 of the adjusted
-    p-value, and scatters it against the log2 fold change. Points are first
-    coloured by the default significance categories, then any user-supplied
-    `highlights` are overlaid on top. 
-    Rows containing any NA in the required column (lfc and padj) are dropped
-    before plotting.
+    Each gene is a point: log2 fold change on the x-axis, -log10 of the adjusted
+    p-value on the y-axis. Points are first coloured by significance category
+    (see "Default colours"), then any `highlights` are drawn on top of them.
+    Rows with a missing value in the `x` or `y` column are dropped.
 
-    
-        plot_volcano(df,
-             y="padj", x="log2FoldChange",
-             highlights=[(["kl-3", "kl-5", "kl-2"], {"color": "red", "size":30}),],
-             display_grid=True, display_gene_name=["kl-3", "kl-5", "kl-2"])#
-
-             highlights special keyword: 
-                - boxes_label : boolean (in future may support dict)
-                - label : str -> add str to legend
-                - label_gene : None or dict indicate that those genes must have their label set, the dict can take any text formatting option from mpl. 
+    Example
+    -------
+    >>> fig, ax = plot_volcano(df, y_thr=1e-6, label_top=5,
+    ...     highlights=[(["FKBP5", "PER1"], {"color": "purple", "size": 200, "label": "my genes"})])
 
     Parameters
     ----------
-    df : pd.DataFrame
-        Rows containing any NA are dropped before plotting.
-    color_bg : str, default "white",
-    x : str , default "log2FoldChange"
-        column used for the X-axis
-    y : str , default "padj",
-        column used for the Y-axis
-    x_thr : float, default 1,
-        X-axis threshold used for coloring, summarizing count and plotting lines
-    y_thr : float, default 0.01, 
-        Y-axis threshold used for coloring, summarizing count and plotting lines
-    
-    ----------
-    ## p-val cap
-        By default easy_volcano shrink the Y axis to the smallest value present in df.
-        p-value of zeros are transformed to this values (needed for the log transform). 
-    clip_pval : float: default None
-        if set superseed pval_floor, clip all pvalue smaller than 'clip_pval' to 'clip_pval'
-    pval_floor : boolean, default False,
-        if set  p-value of zeros are transformed to sys.float_info.min. 
-    ----------
+    df : pandas.DataFrame
+        Results table with one row per gene (e.g. DESeq2, edgeR or limma output).
+        Gene names are read from the index, or from `label_column`.
 
-    ----------
-    ## label
-    label_genes = None,
-    label_genes_line = False,
-    label_top = None, # take int label the top X gene over and under expressed (so *2 labels)
-    label_column = None, # inseatd of using the index look into this column for label name # label_genes must be from this columns
-    label_format = _LABEL_FORMAT_DEFAULT,
-    ----------
-
-    alpha : float, default 1
-        Point transparency passed to scatter.
-    width, float, default 6
-        Figure width in inches.
-    height : float, default, 6
-        Figure height in inches.
-
-    color_bg : str, default "white"
-        Figure background colour.
-    label_genes : set of str, default empty
-        Index labels to annotate. Labels are repositioned with adjustText to
-        reduce overlap.
-    label_genes_line : bool
-        add a line from gene label to gene
+    Data and thresholds
+    ~~~~~~~~~~~~~~~~~~~
     x : str, default "log2FoldChange"
-        Column holding the log2 fold change (x-axis).
+        Column with the log2 fold change (x-axis). edgeR and limma: "logFC".
     y : str, default "padj"
-        Column holding the adjusted p-value (converted to -log10 for the
-        y-axis).
-    x_thr : float, default 1
-        Absolute log2 fold-change threshold used by the default colouring.
-    y_thr : float, default 0.01
-        Adjusted p-value threshold used by the default colouring (compared on
-        the raw p-value, not on -log10).
-    display_grid : bool, default True
-        Whether to draw major and minor grid lines.
-    highlights : list of (selector, override) tuples, default None
-        Custom styling layer, drawn on top of everything else. `selector` is
-        anything accepted by _resolve (a predicate `lambda d: ...`, a boolean
-        Series, or a list of index labels); `override` is a dict of scatter
-        keyword arguments, e.g. {"color": "red", "size": 20} 
+        Column with the adjusted p-value, plotted as -log10 (y-axis).
+        edgeR: "FDR"; limma: "adj.P.Val".
+    x_thr : float or None, default 1
+        Absolute log2 fold-change threshold. Used for the default colours, the
+        vertical threshold lines, the summary and `label_top`.
+    y_thr : float or None, default 0.01
+        Adjusted p-value threshold (a p-value, not its -log10). Used for the
+        default colours, the horizontal threshold line and the summary.
+        If `x_thr` or `y_thr` is None, the default colouring is turned off.
+    clip_pval : float or None, default None
+        If set (strictly between 0 and 1), every p-value below it is raised to it,
+        so a few extreme genes do not squash the rest of the plot.
+        Takes priority over `pval_floor`.
+    pval_floor : bool, default False
+        Where p-values of exactly 0 are drawn (log10(0) is undefined).
+        False: at the smallest non-zero p-value of the table.
+        True: at the smallest positive float (about 1e-308), i.e. far above the rest.
 
-        d[x] and d[y] refer to the "x" argument and the "y" argument (usualy lfc and pvalue).
-        you can also use any coluns present in the dataframe df.
-        [(lambda d: (d[y] >= 2) & (abs(d[x]) <= 1), { "color": "blue"})]
+    Default colours
+    ~~~~~~~~~~~~~~~
+    Each gene falls in one category, from its p-value (p, column `y`) and its
+    log2 fold change (lfc, column `x`):
 
-        USing a label key work in the override, will add it to the legends
-        list selectors match label_column if set, otherwise the index.
-s
-    color_sig : str, default "#F7DDAA"
-        gene that pass the  p-value threshold but not the log folchange threshold.
-        (y > y_thr AND abs(x) > x_thr)
-    
-    color_ns : str, default "lightgrey"
-        gene that do not pass any threshold.
-        (y < y_thr AND abs(x) < x_thr)
-
-    color_up : str, default "#FDAE61"
-        Colour for up-regulated points (y < y_thr and abs(x) > x_thr).
-
-    color_up_sig : str, default "#D77191C"
-        Colour for significantly up-regulated points (y > y_thr and abs(x) > x_thr).
-
-    color_down : str, default "#ABD9E9"
-        Colour for down-regulated points (y < y_thr and abs(x) < -x_thr).
-    
+    color_up_sig : str, default "#D7191C"
+        p <= y_thr and lfc >= x_thr. Shown in the legend as "Overexpressed".
     color_down_sig : str, default "#2C7BB6"
-        Colour for significantly down-regulated points (y > y_thr and abs(x) < -x_thr).
-
-
+        p <= y_thr and lfc <= -x_thr. Shown in the legend as "Underexpressed".
+    color_sig : str, default "darkgrey"
+        p <= y_thr but |lfc| < x_thr.
+    color_up : str, default "#FDAE61"
+        p > y_thr but lfc >= x_thr.
+    color_down : str, default "#ABD9E9"
+        p > y_thr but lfc <= -x_thr.
+    color_ns : str, default "lightgrey"
+        p > y_thr and |lfc| < x_thr.
     no_default : bool, default False
-        If True (or if `x_thr` or `y_thr` is None), skip the default
-        significance colouring; all points keep the base `color`.
-    size : float, default 5
-        Base point size.
-    marker: string '.'
-     default marker 
+        Turn the default colouring off: every point gets `color_base`.
+        Combine with `highlights` for a "spotlight" plot.
+
+    Points
+    ~~~~~~
     color_base : str, default "grey"
-        Base point colour, used before any override. if no default and no highlight all the point will be this color.
-    savefig : str or path, optional
-        If given, save the figure to this path with bbox_inches="tight".
-    ----------
-    ## title, legend and summary layout
-        Elements around the plot are stacked automatically so they never
-        overlap. Above the plot, from the axes up: legend (if
-        legend_loc="top"), subtitle, title. Below the plot, from the x-label
-        down: legend (if legend_loc="bottom"), text summary.
-        All paddings are gaps in points between an element and the one
-        before it in the stack, so they do not depend on figure size.
+        Colour of points that no category or highlight colours.
+    size : float, default 100
+        Point size (matplotlib's `s`, an area in points squared).
+    marker : str, default "."
+        Point shape: any matplotlib marker ("o", "D", "^", ...).
+    alpha : float, default 0.55
+        Point transparency, from 0 (invisible) to 1 (opaque).
+    rasterize : bool, default False
+        When saving to PDF or SVG, draw the points as an image while text, axes
+        and lines stay vector: much smaller files that open quickly in
+        Illustrator. Overrides any "rasterized" set in `highlights`.
+    **scatter_kwargs
+        Any other keyword is passed to matplotlib's `ax.scatter` for every point,
+        e.g. edgecolors="none" or linewidths=0.
+
+    Highlights
+    ~~~~~~~~~~
+    highlights : list of (selector, style) pairs, default None
+        Restyle chosen genes. Highlighted genes are drawn on top of all other
+        points. Pairs are applied in order: when a gene matches several pairs,
+        the later pair wins for the options it sets.
+
+        selector (which genes), one of:
+          - a list, tuple or set of names, matched against the index, or against
+            `label_column` if set. A single gene is still a list: ["FKBP5"].
+          - a function of the table, e.g. lambda d: d["baseMean"] < 100.
+            `d` is `df` without the NA rows, so any column can be used.
+          - a boolean pandas Series indexed like `df`.
+
+        style (how to draw them): a dict of `ax.scatter` options ("color", "size",
+        "alpha", "marker", "edgecolors", "linewidths", "zorder", ...). "color",
+        "size" and "a" are short for matplotlib's "c", "s" and "alpha".
+        Two extra keys:
+          - "label": str, adds the group to the legend.
+          - "label_gene": True to write the gene names on the plot, or a dict of
+            text options (like `label_format`) to also style those names.
+
+        Example: [(lambda d: d.index.str.startswith("COL"),
+                   {"color": "green", "size": 150, "label": "collagens"})]
+
+    Gene labels
+    ~~~~~~~~~~~
+    Labels are positioned with adjustText to limit overlaps. Each gene is labelled
+    once, with priority: highlight "label_gene" > `label_genes` > `label_top`.
+
+    label_top : int or None, default 5
+        Label the N genes with the smallest p-value on each side (lfc > x_thr and
+        lfc < -x_thr), so up to 2 * N labels. None: no automatic labels.
+    label_genes : str or list of str, default None
+        Genes to label, matched against the index or `label_column`.
+        Names that are not found are reported in a warning.
+    label_column : str or None, default None
+        Column holding the gene names to use, in labels and in name selectors,
+        instead of the index (e.g. "gene_name" when the index holds Ensembl IDs).
+    label_format : dict, default {"fontsize": 10, "fontstyle": "normal", "ha": "center", "va": "center"}
+        Text options for all labels (matplotlib's `ax.text`), merged on the default.
+        The keys "x", "y", "s", "position" and "text" are reserved.
+    label_genes_format : dict or None, default None
+        Text options applied on top of `label_format` to the `label_genes` only,
+        e.g. {"fontweight": "bold", "color": "purple"}.
+    label_genes_line : bool, default False
+        Draw a line between each label and its point when the label was moved
+        further than `label_min_arrow_len` (applies to all labels).
+    label_min_arrow_len : float, default 100
+        Shortest line drawn by `label_genes_line`, in pixels. With the default,
+        most lines are too short to be drawn: use about 5 to see them.
+    label_avoid_self : bool, default False
+        Also push each label away from its own point.
+
+    Lines and grid
+    ~~~~~~~~~~~~~~
+    show_thresholds_line : bool, default True
+        Draw the threshold lines at `y_thr` and at -`x_thr` and +`x_thr`.
+    line_format_default : dict, default {"color": "black", "linestyle": "--"}
+        Style of the threshold lines (matplotlib's `ax.axhline` / `ax.axvline`
+        options), merged on the default.
+    h_lines : dict or list of dict, default None
+        Extra horizontal lines. Each dict needs "y", a p-value (drawn at
+        -log10(y)), plus any line option, e.g. {"y": 1e-20, "color": "red"}.
+        Black dashed by default.
+    v_lines : dict or list of dict, default None
+        Extra vertical lines. Each dict needs "x", a log2 fold change, plus any
+        line option, e.g. {"x": 2, "linestyle": ":"}. Black dashed by default.
+    display_grid : bool, default True
+        Draw major and minor grid lines.
+
+    Title, legend and summary
+    ~~~~~~~~~~~~~~~~~~~~~~~~~
+    The elements around the plot are stacked so they never overlap. Above the
+    plot, from the axes up: legend (if legend_loc="top"), subtitle, title. Below
+    the plot, from the x-axis label down: legend (if legend_loc="bottom"),
+    summary. Paddings are gaps in points, so they do not depend on figure size.
 
     title : str, default ""
         Plot title. Not drawn if empty.
-    title_pad : float, default 15
-        Gap (points) between the title and the element below it
-        (subtitle, top legend, or the plot).
     title_fontsize : float, default 28
+    title_pad : float, default 15
+        Gap (points) between the title and the element below it.
     subtitle : str, default ""
-        Text drawn between the title and the plot. Not drawn if empty.
-    subtitle_pad : float, default 15
-        Gap (points) between the subtitle and the element below it
-        (top legend or the plot).
+        Text between the title and the plot. Not drawn if empty.
     subtitle_fontsize : float, default 18
-
+    subtitle_pad : float, default 15
+        Gap (points) between the subtitle and the element below it.
+    xlabel : str, default "$Log_{2}$ fold change"
+    ylabel : str, default "$-Log_{10}$ adj.P"
+        Axis labels. Text between $ signs is rendered as math.
     show_legend : bool, default True
-        Draw the legend. Same as legend_loc=None when False.
+        Draw the legend. False is the same as legend_loc=None.
     legend_loc : {"bottom", "top", "right"} or None, default "bottom"
-        Legend position preset. None draws no legend.
-        Entries come from the default categories ("Overexpressed",
-        "Underexpressed") and from any highlight with a "label" key.
-        If there are no entries, no legend is drawn.
+        Legend position. None: no legend. Entries are "Overexpressed",
+        "Underexpressed" and every highlight with a "label"; with no entries,
+        no legend is drawn.
     legend_nrows : int or None, default None
-        Number of legend rows. None means one row for "top"/"bottom" and
-        one column for "right". An explicit "ncols" in legend_kwargs wins.
+        Number of legend rows. None: one row for "top" and "bottom", one column
+        for "right". An explicit "ncols" in `legend_kwargs` wins.
     legend_kwargs : dict or None, default None
-        Extra keyword arguments passed to matplotlib's ax.legend, merged on
-        top of the preset (e.g. {"fontsize": 12, "frameon": False}).
-        Use matplotlib names (bbox_to_anchor, loc, ncols, ...).
+        Options passed to matplotlib's `ax.legend`, applied on top of the preset,
+        e.g. {"fontsize": 12, "frameon": False, "title": "groups"}.
     padding_legend : float, default 15
-        Gap (points) between the legend and the plot (top) or the x-label
-        (bottom). Currently not applied to legend_loc="right".
-    legend_fancybox : bool, default True
-        Currently unused; pass {"fancybox": ...} in legend_kwargs instead.
-
+        Gap (points) between the legend and the plot ("top") or the x-axis
+        label ("bottom"). Not used for "right".
     show_text_summary : bool, default True
-        Write "up N; down N; ns N" under the plot (needs x_thr and y_thr).
+        Write "up N; down N; ns N" under the plot: genes with p <= y_thr and
+        lfc >= x_thr, genes with p <= y_thr and lfc <= -x_thr, and all others.
+        Needs both `x_thr` and `y_thr`.
     font_size_text_summary : float, default 16
     padding_text_summary : float, default 15
-        Gap (points) between the summary and the element above it
-        (bottom legend or the x-label).
-    ----------
+        Gap (points) between the summary and the element above it.
 
-    return_fig : bool, default False
-        return (fig, ax)
-    xlabel: str default '$Log_{2}$ fold change',
-    ylabel: str '$-Log_{10}$ adj.P'
-    custom_ax: if set function will not create a figure but plot in this axes directly not compatible with:
-      return fig and savefig. 
-    **scatter_kwargs
-        Extra keyword arguments forwarded to scatter for every point
-        (e.g. marker, linewidths).
+    Figure and output
+    ~~~~~~~~~~~~~~~~~
+    ax : matplotlib Axes or None, default None
+        Draw into this existing Axes, e.g. one panel of plt.subplots(); `width`
+        and `height` are then ignored. None: create a new figure.
+    width : float, default 6
+        Figure width in inches.
+    height : float, default 6
+        Figure height in inches.
+        Tick and axis-label font sizes follow the size of the plot.
+    color_bg : str, default "white"
+        Background colour of the plot area.
+    savefig : str or path, default None
+        Save the figure to this file (format from the extension: .png, .pdf,
+        .svg, ...), cropped to its content. Text stays editable in PDF files.
 
     Returns
     -------
-    (fig ax)
-        The figure is drawn
-        optional:
-            if savefig is not None and is a vlaid file save the figure
+    fig, ax : matplotlib Figure and Axes
+        Keep customising them with matplotlib (annotations, shading, limits, ...).
+
+    Raises
+    ------
+    ValueError
+        If no row is left after dropping missing values, if no p-value is above 0
+        (is `y` already -log10 transformed?), if `clip_pval` is not between 0 and 1,
+        or if `legend_loc` is not one of the presets.
     """
 
     df = prep_df(df, x, y, pval_floor, clip_pval)
@@ -616,7 +645,7 @@ s
 
     
     highlights_default = get_highlight_default(y_thr, x_thr, no_default, x, y, color_sig, color_ns, color_up, color_down, color_up_sig, color_down_sig)
-    legend = prep_legend(highlights_default, highlights, **scatter_kwargs)
+    legend = prep_legend(highlights_default, highlights, marker=marker, **scatter_kwargs)
     # prep label (now wotk with  to [(set(label), format_dict)])
     labels_hold = []
     
