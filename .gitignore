@@ -222,4 +222,7 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-'/Users/rlannes/Code/easyvolcano/marketing_notes.md'
+# Personal notes and tooling
+marketing_notes.md
+scripts/nb_to_readme.py
+doreadme_generate.md

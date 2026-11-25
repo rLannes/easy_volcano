@@ -3,7 +3,7 @@ requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
-name = "easyvolcano"
+name = "easy_volcano"
 dynamic = ["version"]          # taken from the git tag (vX.Y.Z) by hatch-vcs
 description = "Volcano plots for gene differential-expression results."
 readme = "README.md"
@@ -37,13 +37,13 @@ Issues = "https://github.com/rLannes/easy_volcano/issues"
 source = "vcs"
 raw-options = { fallback_version = "0.0.0" }
 
-# --- build: ship src/easyvolcano.py as the top-level module `easyvolcano` ---
+# --- build: ship src/easy_volcano.py as the top-level module `easy_volcano` ---
 [tool.hatch.build.targets.wheel]
-only-include = ["src/easyvolcano.py"]
+only-include = ["src/easy_volcano.py"]
 sources = ["src"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/easyvolcano.py", "tests", "README.md"]
+include = ["src/easy_volcano.py", "tests", "README.md"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

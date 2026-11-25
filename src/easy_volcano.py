@@ -309,8 +309,9 @@ def _check_lines_param(lines):
     if not (isinstance(lines, list) or isinstance(lines, dict)):
         raise ValueError("h_lines parameter must be a list of dict or a dict")
     
-    lines = lines if isinstance(lines, dict) else [lines]
+    lines = lines if isinstance(lines, list) else [lines]
     return lines 
+
 def _parse_label_format(label_format, _BLACK_LIST=_BLACK_LIST_LABEL_FORMAT):
 
     label_format = {**_LABEL_FORMAT_DEFAULT, **(label_format or {})}
@@ -322,9 +323,9 @@ def _parse_label_format(label_format, _BLACK_LIST=_BLACK_LIST_LABEL_FORMAT):
     return label_format
 
 _LEGEND_PRESETS = {
-    "right":  {"bbox_to_anchor": (1.0, 0.5), "loc": "center left",  "ncols": 1, "borderaxespad": 0},
-    "top":    {"bbox_to_anchor": (0.5, 1.0), "loc": "lower center", "borderaxespad": 0},
-    "bottom": {"bbox_to_anchor": (0.5, 0.0), "loc": "upper center", "borderaxespad": 0},
+    "right":  {"bbox_to_anchor": (1.0, 0.5), "fancybox": False, "loc": "center left",  "ncols": 1, "borderaxespad": 0},
+    "top":    {"bbox_to_anchor": (0.5, 1.0), "fancybox": False, "loc": "lower center", "borderaxespad": 0},
+    "bottom": {"bbox_to_anchor": (0.5, 0.0), "fancybox": False, "loc": "upper center", "borderaxespad": 0},
 }
 
 # 72 points to inches
@@ -348,7 +349,7 @@ def plot_volcano(df,
                  color_bg = "white",
                  x="log2FoldChange", y = "padj",
                  x_thr=1, y_thr=0.01, 
-                pval_floor=False,
+                 pval_floor=False,
                  clip_pval = None,
                  highlights=None, 
 
@@ -379,8 +380,8 @@ def plot_volcano(df,
                 display_grid=True, 
                 no_default=False,
                 xlabel='$Log_{2}$ fold change', ylabel='$-Log_{10}$ adj.P',
-                size=50, color_base="grey",
-                width=8, height=4.8,
+                size=100, color_base="grey",
+                width=6, height=6,
                 ax = None,
                 rasterize = False, # if set override any other arg and rasterize all
                 savefig=None,
@@ -397,7 +398,6 @@ def plot_volcano(df,
                 legend_loc="bottom",
                 legend_kwargs = None,
                 legend_nrows = None, # default
-                legend_fancybox=True,
                 padding_legend=15,
 
                 show_text_summary = True,
@@ -442,7 +442,7 @@ def plot_volcano(df,
     
     ----------
     ## p-val cap
-        By default easyvolcano shrink the Y axis to the smallest value present in df.
+        By default easy_volcano shrink the Y axis to the smallest value present in df.
         p-value of zeros are transformed to this values (needed for the log transform). 
     clip_pval : float: default None
         if set superseed pval_floor, clip all pvalue smaller than 'clip_pval' to 'clip_pval'
@@ -461,9 +461,9 @@ def plot_volcano(df,
 
     alpha : float, default 1
         Point transparency passed to scatter.
-    width, float, default 8
+    width, float, default 6
         Figure width in inches.
-    height : float, default, 4.5
+    height : float, default, 6
         Figure height in inches.
 
     color_bg : str, default "white"
@@ -682,12 +682,12 @@ s
     # add boxed_label option
     if texts_:
         if label_genes_line:
-            adjustText.adjust_text(texts_, expand=(1.1, 1.2),
+            adjustText.adjust_text(texts_, expand=(1.1, 1.2), ax=ax,
                                    min_arrow_len=label_min_arrow_len,
                                    avoid_self=label_avoid_self,
                                    arrowprops=dict(arrowstyle='-', color='black'))
         else:
-            adjustText.adjust_text(texts_, expand=(1.1, 1.2),
+            adjustText.adjust_text(texts_, expand=(1.1, 1.2), ax=ax,
                                    min_arrow_len=label_min_arrow_len,
                                    avoid_self=label_avoid_self)
 
@@ -727,15 +727,15 @@ s
                 raise ValueError("h_lines parameter must be a list of dict or a dict")
 
             copy_fmt = dict(h_line)
-            y = copy_fmt.pop("y", None)
+            y_p = copy_fmt.pop("y", None)
             # neglog =  copy_line.pop("neglog", False) not sure about that option; to niche to be usefull
-            if (y is None) or not (isinstance(y, numbers.Real) or (isinstance(y, bool))):
+            if (y_p is None) or not (isinstance(y_p, numbers.Real) or (isinstance(y_p, bool))):
                 raise ValueError("h_lines dict(s) must contain a 'y' key with a numerical value (pvalue, plot position)")
-            if y <= 0:
+            if y_p <= 0:
                 raise ValueError("'y' cannot be equal to zeros or negative, undefined log10")
             
             copy_fmt = {**_LINES_FORMAT_DEFAULT, **copy_fmt}
-            ax.axhline(-math.log10(y), **copy_fmt)
+            ax.axhline(-math.log10(y_p), **copy_fmt)
 
     if v_lines:
 
@@ -746,25 +746,31 @@ s
                 raise ValueError("v_lines parameter must be a list of dict or a dict")
             
             copy_fmt = dict(v_line)
-            x = copy_fmt.pop("x", None)
+            x_p = copy_fmt.pop("x", None)
 
-            if (x is None) or not (isinstance(x, numbers.Real) or (isinstance(x, bool))):
+            if (x_p is None) or not (isinstance(x_p, numbers.Real) or (isinstance(x_p, bool))):
                 raise ValueError("v_lines dict(s) must contain a 'x' key with a numerical value (pvalue, plot position)")
             
             copy_fmt = {**_LINES_FORMAT_DEFAULT, **copy_fmt}
-            ax.axvline(x, **copy_fmt)
+            ax.axvline(x_p, **copy_fmt)
 
-            
-    ax.tick_params(axis='y', labelsize=20)
-    ax.tick_params(axis='x', labelsize=20)
-    ax.margins(x=0.02, tight=True)
-    ax.margins(y=0.02, tight=True)  
+    #xlim = ax.get_xlim()
+    #ylim = ax.get_ylim()
+
+    w, h = ax.bbox.width / fig.dpi, ax.bbox.height / fig.dpi    # axes size in inches
+    scale = min(w / 6.5, h / 3.5)    
+    ax.tick_params(axis='y', labelsize=20 * scale)
+    ax.tick_params(axis='x', labelsize=20 * scale)
+    ax.margins(x=0.1, tight=True)
+    ax.margins(y=0.1, tight=True)  
+    y_lim = ax.get_ylim()
+    ax.set_ylim((-2, y_lim[1]))
 
     ax.spines[['right', 'top']].set_visible(False)
 
 
-    ax.set_ylabel(ylabel, fontsize=24)
-    ax.set_xlabel(xlabel , fontsize=24)
+    ax.set_ylabel(ylabel, fontsize=24 * scale)
+    ax.set_xlabel(xlabel , fontsize=24 * scale)
 
 
     # I use a tight box approach to place the titel and extar text + legend
@@ -783,9 +789,11 @@ s
             if not c: 
                 c = v.get("color")
             m = v.get("marker", ".")
+            m = "o" if m == "." else m 
             a = v.get("alpha", alpha)
             legend_elements.append(Line2D([0], [0],  marker=m, #alpha = a,
-                                        markerfacecolor=c, color='w', label=k, markersize=18))
+                                        markerfacecolor=c, color='w',
+                                          label=k, markersize=10))
 
         n = len(legend_elements)
         if legend_nrows is not None:
@@ -864,16 +872,6 @@ s
             ax.legend(handles=legend_elements,
                            **legend_args)
         
-    #bb = ax.get_tightbbox(fig.canvas.get_renderer())    # axes + ticks + xlabel
-    #y_bottom = ax.transAxes.inverted().transform((0, bb.y0))[1]
-
-    #    if legend_elements:
-    #        ax.legend(handles=legend_elements, bbox_to_anchor=legend_bbox, fancybox=legend_fancybox,
-    #                   loc=legend_loc, ncols=legend_ncols)
-    
-    #if title:
-    #    ax.set_title(title, fontsize=title_fontsize, pad=title_pad)
-
     plt.tight_layout()
     if savefig:
         fig.savefig(savefig, bbox_inches="tight")

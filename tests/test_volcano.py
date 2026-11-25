@@ -1,4 +1,4 @@
-"""Tests for easyvolcano.
+"""Tests for easy_volcano.
 
 Tests describe the *intended* behaviour (docstring + common sense for users),
 so a failing test means either a bug or a design decision to revisit.
@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import easyvolcano as ev
+import easy_volcano as ev
 
 X, Y = "log2FoldChange", "padj"
 
@@ -102,7 +102,7 @@ def test_prep_df_no_positive_pvalue_raises(df, pval_floor):
 
 
 def test_prep_df_logs_dropped_rows(df, caplog):
-    with caplog.at_level(logging.INFO, logger="easyvolcano"):
+    with caplog.at_level(logging.INFO, logger="easy_volcano"):
         ev.prep_df(df, X, Y, pval_floor=False)
     assert "Dropped 1" in caplog.text
 
@@ -294,7 +294,7 @@ def test_label_genes_accepts_common_containers(prepped, container):
 
 
 def test_label_genes_missing_warns(prepped, caplog):
-    with caplog.at_level(logging.WARNING, logger="easyvolcano"):
+    with caplog.at_level(logging.WARNING, logger="easy_volcano"):
         rows = _labels(prepped, label_genes=["A", "ZZZ"], label_column="gene_name")
     assert list(rows) == ["ENS1"]
     assert "ZZZ" in caplog.text
